@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 500" width="100%" height="100%">
+  <defs>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00C9FF" />
+      <stop offset="100%" stop-color="#92FE9D" />
+    </linearGradient>
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0D8ABC" />
+      <stop offset="100%" stop-color="#10B981" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="6" flood-opacity="0.15" />
+    </filter>
+  </defs>
+
+  <!-- Fundo Limpo -->
+  <rect width="100%" height="100%" fill="#F8FAFC" rx="20" />
+
+  <!-- Grupo do Emblema Central -->
+  <g transform="translate(300, 180)" text-anchor="middle" filter="url(#shadow)">
+    <!-- Engrenagem / Gamificação -->
+    <path d="M-60,-15 L-50,-15 L-46,-28 L-55,-37 L-37,-55 L-28,-46 L-15,-50 L-15,-60 L15,-60 L15,-50 L28,-46 L37,-55 L55,-37 L46,-28 L50,-15 L60,-15 L60,15 L50,15 L46,28 L55,37 L37,55 L28,46 L15,50 L15,60 L-15,60 L-15,50 L-28,46 L-37,55 L-55,37 L-46,28 L-50,15 L-60,15 Z" fill="#F59E0B" />
+    
+    <!-- Escudo / Aprendizagem Segura -->
+    <path d="M-42,-35 C-20,-45 20,-45 42,-35 C42,10 25,48 0,65 C-25,48 -42,10 -42,-35 Z" fill="url(#shieldGrad)" stroke="#FFFFFF" stroke-width="4" />
+
+    <!-- Lâmpada do Conhecimento -->
+    <!-- Raio / Luz -->
+    <circle cx="0" cy="-6" r="18" fill="#FEF08A" opacity="0.4" />
+    <path d="M-12,-8 C-12,-16 12,-16 12,-8 C12,-3 7,2 6,6 L-6,6 C-7,2 -12,-3 -12,-8 Z" fill="#FFFFFF" />
+    <rect x="-5" y="8" width="10" height="3" rx="1.5" fill="#CBD5E1" />
+    <rect x="-3" y="13" width="6" height="2" rx="1" fill="#CBD5E1" />
+    
+    <!-- Estrelas de XP / Conquista -->
+    <polygon points="0,-48 3,-41 10,-41 5,-37 7,-30 0,-34 -7,-30 -5,-37 -10,-41 -3,-41" fill="#FBBF24" />
+    <polygon points="-55,-8 -53,-4 -48,-4 -51,-1 -50,4 -55,1 -60,4 -59,-1 -62,-4 -57,-4" fill="#FBBF24" />
+    <polygon points="55,-8 57,-4 62,-4 59,-1 60,4 55,1 50,4 51,-1 48,-4 53,-4" fill="#FBBF24" />
+
+    <!-- Ícones Satélite: Livro e Comando -->
+    <!-- Livro -->
+    <g transform="translate(-75, 25) rotate(-15)">
+      <rect x="-14" y="-18" width="28" height="36" rx="3" fill="#3B82F6" />
+      <rect x="-11" y="-15" width="22" height="30" rx="2" fill="#FFFFFF" />
+      <line x1="-7" y1="-8" x2="7" y2="-8" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" />
+      <line x1="-7" y1="-2" x2="7" y2="-2" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" />
+      <line x1="-7" y1="4" x2="2" y2="4" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" />
+    </g>
+
+    <!-- Troféu -->
+    <g transform="translate(75, 25) rotate(15)">
+      <path d="M-10,-14 L10,-14 L8,0 C7,6 2,10 0,10 C-2,10 -7,6 -8,0 Z" fill="#F59E0B" />
+      <path d="M-10,-10 C-14,-10 -14,-4 -10,-4" fill="none" stroke="#F59E0B" stroke-width="2" />
+      <path d="M10,-10 C14,-10 14,-4 10,-4" fill="none" stroke="#F59E0B" stroke-width="2" />
+      <rect x="-3" y="10" width="6" height="5" fill="#D97706" />
+      <rect x="-7" y="15" width="14" height="3" rx="1" fill="#D97706" />
+    </g>
+  </g>
+
+  <!-- Tipografia -->
+  <g text-anchor="middle">
+    <!-- Título Principal -->
+    <text x="300" y="365" font-family="'Segoe UI', 'Montserrat', Roboto, sans-serif" font-size="46" font-weight="900" fill="url(#textGrad)" letter-spacing="3">GAMIFICA</text>
+    <text x="300" y="415" font-family="'Segoe UI', 'Montserrat', Roboto, sans-serif" font-size="38" font-weight="800" fill="#F59E0B" letter-spacing="4">EDU</text>
+    
+    <!-- Linhas decorativas laterais -->
+    <line x1="160" y1="403" x2="215" y2="403" stroke="#CBD5E1" stroke-width="3" stroke-linecap="round" />
+    <line x1="385" y1="403" x2="440" y2="403" stroke="#CBD5E1" stroke-width="3" stroke-linecap="round" />
+
+    <!-- Slogan / Subtítulo -->
+    <text x="300" y="450" font-family="'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="5">APRENDA BRINCANDO</text>
+  </g>
+</svg>
