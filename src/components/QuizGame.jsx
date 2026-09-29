@@ -4,7 +4,10 @@ import { mockQuestions } from '../data/questions';
 export default function QuizGame({ subject, grade, topic, onComplete, onExit }) {
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
   const [score, setScore] = useState(0);
+  const [phaseScore, setPhaseScore] = useState(0);
   const [showResult, setShowResult] = useState(false);
+  const [showIntermission, setShowIntermission] = useState(false);
+  const [currentPhase, setCurrentPhase] = useState(1);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [isAnswerChecked, setIsAnswerChecked] = useState(false);
 
@@ -16,16 +19,17 @@ export default function QuizGame({ subject, grade, topic, onComplete, onExit }) 
   let baseQuestions = mockQuestions[subject.id]?.[grade]?.[topic.id] || fallbackQuestions;
   
   // Gera um simulado de 30 questões (repetindo/criando genéricas se necessário)
-  let questions = [...baseQuestions];
-  while (questions.length < 30) {
-    questions.push({
-      id: `sim-${questions.length}`,
-      question: `[Simulado] Questão de fixação nº ${questions.length + 1} sobre o conteúdo de ${topic.title}.`,
+  let allQuestions = [...baseQuestions];
+  while (allQuestions.length < 30) {
+    allQuestions.push({
+      id: `sim-${allQuestions.length}`,
+      question: `[Simulado] Questão de fixação nº ${allQuestions.length + 1} sobre o conteúdo de ${topic.title}.`,
       options: ["Alternativa Correta", "Alternativa Incorreta", "Outro Distrator", "Mais um erro"],
       correct: 0
     });
   }
     
+  const questions = allQuestions.slice((currentPhase - 1) * 10, currentPhase * 10);
   const currentQuestion = questions[currentQuestionIdx];
 
   const handleAnswer = (index) => {
@@ -39,6 +43,7 @@ export default function QuizGame({ subject, grade, topic, onComplete, onExit }) 
     setIsAnswerChecked(true);
     if (selectedAnswer === currentQuestion.correct) {
       setScore(score + 100);
+      setPhaseScore(phaseScore + 100);
     }
   };
 
@@ -48,13 +53,62 @@ export default function QuizGame({ subject, grade, topic, onComplete, onExit }) 
       setSelectedAnswer(null);
       setIsAnswerChecked(false);
     } else {
-      setShowResult(true);
+      if (currentPhase < 3) {
+        setShowIntermission(true);
+      } else {
+        setShowResult(true);
+      }
     }
   };
 
+  const advancePhase = () => {
+    setCurrentPhase(currentPhase + 1);
+    setCurrentQuestionIdx(0);
+    setPhaseScore(0);
+    setSelectedAnswer(null);
+    setIsAnswerChecked(false);
+    setShowIntermission(false);
+  };
+
+  if (showIntermission) {
+    const acertos = phaseScore / 100;
+    return (
+      <div className="quiz-result-card glass-card animate-float" style={{ animationDuration: '4s' }}>
+        <div className="trophy-icon">⭐</div>
+        <h2>Fase {currentPhase} Concluída!</h2>
+        <p>Você acertou {acertos} de 10 questões nesta etapa.</p>
+        
+        <div className="score-display">
+          <span className="xp-text">+{phaseScore} XP</span>
+        </div>
+        
+        <p>Prepare-se para as próximas questões!</p>
+        
+        <button className="btn btn-primary" onClick={advancePhase} style={{ marginTop: '1rem', padding: '1rem 3rem' }}>
+          Avançar para Fase {currentPhase + 1} ➔
+        </button>
+        <style>{`
+          .quiz-result-card {
+            max-width: 600px;
+            margin: 4rem auto;
+            padding: 4rem 2rem;
+            text-align: center;
+            background: white;
+            border-top: 8px solid var(--primary);
+          }
+          .trophy-icon { font-size: 5.5rem; margin-bottom: 1rem; animation: float 3s ease-in-out infinite; }
+          .quiz-result-card h2 { font-size: 2.5rem; color: var(--text-main); margin-bottom: 0.5rem; }
+          .score-display { background: var(--warning-light); display: inline-block; padding: 1rem 3rem; border-radius: var(--radius-full); margin: 0.5rem 0 2rem; border: 2px solid rgba(245, 158, 11, 0.2); box-shadow: var(--shadow-md); }
+          .xp-text { font-size: 2rem; font-weight: 900; color: var(--warning); }
+          .quiz-result-card p { font-size: 1.2rem; color: var(--text-muted); margin-bottom: 1rem; }
+        `}</style>
+      </div>
+    );
+  }
+
   if (showResult) {
     const acertos = score / 100;
-    const nota = ((acertos / questions.length) * 10).toFixed(1);
+    const nota = ((acertos / 30) * 10).toFixed(1);
     const isApproved = acertos >= 15; // Passa se acertar metade
     
     return (
@@ -136,7 +190,7 @@ export default function QuizGame({ subject, grade, topic, onComplete, onExit }) 
     );
   }
 
-  const progress = ((currentQuestionIdx) / questions.length) * 100;
+  const progress = ((currentPhase - 1) * 33) + ((currentQuestionIdx / questions.length) * 33);
 
   // Renderiza opções dinamicamente (suporta Verdadeiro/Falso ou Múltipla Escolha)
   const isTrueFalse = currentQuestion.type === "boolean" || currentQuestion.options.length === 2;
@@ -144,10 +198,9 @@ export default function QuizGame({ subject, grade, topic, onComplete, onExit }) 
   return (
     <div className="quiz-container">
       <div className="quiz-header glass">
-        <button className="btn-exit" onClick={onExit}>✕</button>
         <div className="subject-info">
           <span className="badge-grade">{grade}º Ano</span>
-          <span className="badge-topic">{topic.title}</span>
+          <span className="badge-topic">{topic.title} (Fase {currentPhase}/3)</span>
         </div>
         <div className="progress-bar-wrapper">
           <div className="progress-bar-track">

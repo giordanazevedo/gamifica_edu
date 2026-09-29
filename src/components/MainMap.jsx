@@ -1,27 +1,32 @@
 import React, { useState } from 'react';
+import { BookOpen, Calculator, FlaskConical, Landmark, Globe, MessageCircle, Palette, Activity, Heart, Trophy, X, Plus, BrainCircuit, OctagonAlert, Zap, Lock, Gamepad2, UserCircle2 } from 'lucide-react';
 import { curriculum } from '../data/curriculum';
 import MemoryGame from './MemoryGame';
-import SpinWheel from './SpinWheel';
 import JumperGame from './JumperGame';
 import StopGame from './StopGame';
 
 const allSubjects = [
-  { id: 'portugues', name: 'Português', icon: '📚', color: '#9D74FF' },
-  { id: 'matematica', name: 'Matemática', icon: '🔢', color: '#4FB0FF' },
-  { id: 'ciencias', name: 'Ciências', icon: '🔬', color: '#10B981' },
-  { id: 'historia', name: 'História', icon: '🏺', color: '#F59E0B' },
-  { id: 'geografia', name: 'Geografia', icon: '🌍', color: '#06B6D4' },
-  { id: 'ingles', name: 'Inglês', icon: '🗣️', color: '#EF4444' },
-  { id: 'arte', name: 'Arte', icon: '🎨', color: '#EC4899' },
-  { id: 'ed_fisica', name: 'Ed. Física', icon: '⚽', color: '#F97316' },
-  { id: 'religiao', name: 'Ensino Relig.', icon: '🕊️', color: '#8B5CF6' },
+  { id: 'portugues', name: 'Português', icon: <BookOpen size={18} />, color: '#9D74FF' },
+  { id: 'matematica', name: 'Matemática', icon: <Calculator size={18} />, color: '#4FB0FF' },
+  { id: 'ciencias', name: 'Ciências', icon: <FlaskConical size={18} />, color: '#10B981' },
+  { id: 'historia', name: 'História', icon: <Landmark size={18} />, color: '#F59E0B' },
+  { id: 'geografia', name: 'Geografia', icon: <Globe size={18} />, color: '#06B6D4' },
+  { id: 'ingles', name: 'Inglês', icon: <MessageCircle size={18} />, color: '#EF4444' },
+  { id: 'arte', name: 'Arte', icon: <Palette size={18} />, color: '#EC4899' },
+  { id: 'ed_fisica', name: 'Ed. Física', icon: <Activity size={18} />, color: '#F97316' },
+  { id: 'religiao', name: 'Ensino Relig.', icon: <Heart size={18} />, color: '#8B5CF6' },
 ];
 
-export default function MainMap({ userGrade, completedTopics, onSelectTopic, onMinigameWin }) {
-  const [activeSubjectId, setActiveSubjectId] = useState(allSubjects[0].id);
+export default function MainMap({ userGrade, completedTopics, onSelectTopic, onMinigameWin, initialSubjectId }) {
+  const [activeSubjectId, setActiveSubjectId] = useState(initialSubjectId || allSubjects[0].id);
+
+  React.useEffect(() => {
+    if (initialSubjectId) {
+      setActiveSubjectId(initialSubjectId);
+    }
+  }, [initialSubjectId]);
   const [showRanking, setShowRanking] = useState(false);
   const [showMinigame, setShowMinigame] = useState(false);
-  const [showWheel, setShowWheel] = useState(false);
   const [showJumper, setShowJumper] = useState(false);
   const [showStop, setShowStop] = useState(false);
   
@@ -56,7 +61,7 @@ export default function MainMap({ userGrade, completedTopics, onSelectTopic, onM
     <div className="dashboard-wrapper">
       {/* Botão de Ranking Flutuante */}
       <button className="ranking-fab" onClick={() => setShowRanking(true)}>
-        🏆 Ranking
+        <Trophy size={18} /> Ranking
       </button>
 
       {/* Modal de Ranking */}
@@ -64,7 +69,7 @@ export default function MainMap({ userGrade, completedTopics, onSelectTopic, onM
         <div className="ranking-modal glass-card" style={{ maxWidth: '450px' }}>
           <div className="ranking-header">
             <h3>Competição (Amigos)</h3>
-            <button onClick={() => setShowRanking(false)}>✕</button>
+            <button onClick={() => setShowRanking(false)}><X size={20} /></button>
           </div>
           
           <form onSubmit={handleAddFriend} style={{ display: 'flex', gap: '10px', marginBottom: '1.5rem' }}>
@@ -75,7 +80,7 @@ export default function MainMap({ userGrade, completedTopics, onSelectTopic, onM
               placeholder="Adicionar amigo..."
               style={{ flex: 1, padding: '10px', borderRadius: 'var(--radius-md)', border: '2px solid var(--border-light)', outline: 'none' }}
             />
-            <button type="submit" className="btn btn-primary" style={{ padding: '10px 15px' }}>➕</button>
+            <button type="submit" className="btn btn-primary" style={{ padding: '10px 15px', display: 'flex', alignItems: 'center' }}><Plus size={20} /></button>
           </form>
 
           <div className="ranking-list" style={{ maxHeight: '300px', overflowY: 'auto' }}>
@@ -89,7 +94,7 @@ export default function MainMap({ userGrade, completedTopics, onSelectTopic, onM
               return (
                 <div key={index} className={`ranking-item ${itemClass}`} style={player.isMe ? { border: '2px solid var(--primary)' } : {}}>
                   <span style={{ width: '30px', textAlign: 'center' }}>{medal}</span> 
-                  <span className="avatar">{player.avatar}</span> 
+                  <span className="avatar"><UserCircle2 size={24} color="var(--primary)" /></span> 
                   <span>{player.name}</span> 
                   <span className="score">{player.score} XP</span>
                 </div>
@@ -115,40 +120,32 @@ export default function MainMap({ userGrade, completedTopics, onSelectTopic, onM
       </div>
 
       <div className="dashboard-header text-center" style={{ marginTop: '1rem', marginBottom: '2rem' }}>
-        <h2 className="text-gradient" style={{ fontSize: '2.5rem' }}>{activeSubject.name}</h2>
+        <h2 style={{ fontSize: '2.5rem', color: activeSubject.color }}>{activeSubject.name}</h2>
         <p style={{ color: 'var(--text-muted)' }}>Escolha qualquer conteúdo do {userGrade}º Ano para estudar</p>
       </div>
 
       {/* Banners de Minigames */}
       <div className="minigames-container" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-        <div className="fliperama-banner glass-card" onClick={() => setShowMinigame(true)} style={{ marginBottom: 0, padding: '1rem' }}>
-          <div className="fliperama-icon" style={{ fontSize: '2rem' }}>🧠</div>
+        <div className="fliperama-banner glass-card" onClick={() => setShowMinigame(true)} style={{ marginBottom: 0, padding: '1rem', borderColor: activeSubject.color }}>
+          <div className="fliperama-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><BrainCircuit size={32} color={activeSubject.color} /></div>
           <div className="fliperama-info">
-            <h3 style={{ fontSize: '1.2rem' }}>Memória</h3>
+            <h3 style={{ fontSize: '1.2rem', color: activeSubject.color }}>Memória</h3>
             <p style={{ fontSize: '0.85rem' }}>Ache os pares!</p>
           </div>
         </div>
 
-        <div className="fliperama-banner glass-card" onClick={() => setShowStop(true)} style={{ marginBottom: 0, padding: '1rem', background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(245, 158, 11, 0.1))', borderColor: 'var(--danger)' }}>
-          <div className="fliperama-icon" style={{ fontSize: '2rem' }}>🛑</div>
+        <div className="fliperama-banner glass-card" onClick={() => setShowStop(true)} style={{ marginBottom: 0, padding: '1rem', borderColor: activeSubject.color }}>
+          <div className="fliperama-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><OctagonAlert size={32} color={activeSubject.color} /></div>
           <div className="fliperama-info">
-            <h3 style={{color: 'var(--danger)', fontSize: '1.2rem'}}>Stop</h3>
+            <h3 style={{ fontSize: '1.2rem', color: activeSubject.color }}>Stop</h3>
             <p style={{ fontSize: '0.85rem' }}>Letras e Categorias!</p>
           </div>
         </div>
 
-        <div className="fliperama-banner glass-card" onClick={() => setShowWheel(true)} style={{ marginBottom: 0, padding: '1rem', background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(239, 68, 68, 0.1))', borderColor: 'var(--warning)' }}>
-          <div className="fliperama-icon" style={{ fontSize: '2rem' }}>🎡</div>
+        <div className="fliperama-banner glass-card" onClick={() => setShowJumper(true)} style={{ marginBottom: 0, padding: '1rem', borderColor: activeSubject.color }}>
+          <div className="fliperama-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Zap size={32} color={activeSubject.color} /></div>
           <div className="fliperama-info">
-            <h3 style={{color: 'var(--warning)', fontSize: '1.2rem'}}>Roleta Diária</h3>
-            <p style={{ fontSize: '0.85rem' }}>Prêmios enormes!</p>
-          </div>
-        </div>
-
-        <div className="fliperama-banner glass-card" onClick={() => setShowJumper(true)} style={{ marginBottom: 0, padding: '1rem', background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(6, 182, 212, 0.1))', borderColor: 'var(--success)' }}>
-          <div className="fliperama-icon" style={{ fontSize: '2rem' }}>🏃</div>
-          <div className="fliperama-info">
-            <h3 style={{color: 'var(--success)', fontSize: '1.2rem'}}>Corrida XP</h3>
+            <h3 style={{ fontSize: '1.2rem', color: activeSubject.color }}>Corrida XP</h3>
             <p style={{ fontSize: '0.85rem' }}>Farme muito XP!</p>
           </div>
         </div>
@@ -168,8 +165,8 @@ export default function MainMap({ userGrade, completedTopics, onSelectTopic, onM
                 onClick={() => onSelectTopic(activeSubject, topic)}
                 style={{ '--node-color': activeSubject.color }}
               >
-                <div className="topic-icon-wrapper" style={{ background: isCompleted ? 'var(--success)' : activeSubject.color }}>
-                  {isCompleted ? '⭐' : topic.icon}
+                <div className="topic-icon-wrapper" style={{ background: isCompleted ? 'var(--success)' : activeSubject.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {isCompleted ? <Trophy size={20} color="white" /> : <Gamepad2 size={20} color="white" />}
                 </div>
                 
                 <div className="topic-content">
@@ -207,16 +204,6 @@ export default function MainMap({ userGrade, completedTopics, onSelectTopic, onM
           onWin={(xp) => {
             onMinigameWin(xp);
             setShowMinigame(false);
-          }} 
-        />
-      )}
-
-      {showWheel && (
-        <SpinWheel 
-          onClose={() => setShowWheel(false)} 
-          onWin={(xp) => {
-            onMinigameWin(xp);
-            setShowWheel(false);
           }} 
         />
       )}
@@ -359,7 +346,8 @@ export default function MainMap({ userGrade, completedTopics, onSelectTopic, onM
           padding: 1.5rem 2rem;
           margin-bottom: 2rem;
           background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(236, 72, 153, 0.1));
-          border: 2px dashed var(--primary);
+          border: 1px solid rgba(139, 92, 246, 0.3);
+          border-radius: var(--radius-lg);
           cursor: pointer;
           transition: transform 0.2s, box-shadow 0.2s;
         }
