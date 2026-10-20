@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
-import { mockQuestions } from '../data/questions';
+import React, { useMemo, useState } from 'react';
+import { createQuestionRound, getPreparedQuestions, recordQuestionAnswer } from '../data/questionBank';
+
+const QUESTIONS_PER_PHASE = 15;
 
 export default function QuizGame({ subject, grade, topic, onComplete, onExit }) {
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
@@ -10,27 +12,40 @@ export default function QuizGame({ subject, grade, topic, onComplete, onExit }) 
   const [currentPhase, setCurrentPhase] = useState(1);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [isAnswerChecked, setIsAnswerChecked] = useState(false);
-
-  // Buscar questões
-  const fallbackQuestions = [
-    { type: "multiple", question: `Pergunta genérica sobre ${topic.title}`, options: ["A", "B", "C", "D"], correct: 0 }
-  ];
-
-  let baseQuestions = mockQuestions[subject.id]?.[grade]?.[topic.id] || fallbackQuestions;
-  
-  // Gera um simulado de 30 questões (repetindo/criando genéricas se necessário)
-  let allQuestions = [...baseQuestions];
-  while (allQuestions.length < 30) {
-    allQuestions.push({
-      id: `sim-${allQuestions.length}`,
-      question: `[Simulado] Questão de fixação nº ${allQuestions.length + 1} sobre o conteúdo de ${topic.title}.`,
-      options: ["Alternativa Correta", "Alternativa Incorreta", "Outro Distrator", "Mais um erro"],
-      correct: 0
-    });
-  }
-    
-  const questions = allQuestions.slice((currentPhase - 1) * 10, currentPhase * 10);
+  const [difficulty, setDifficulty] = useState('misturado');
+  const [wrongAnswers, setWrongAnswers] = useState([]);
+  const subjectId = subject?.id || subject?.name;
+  const preparedQuestions = useMemo(
+    () => getPreparedQuestions(subjectId, grade, topic.id),
+    [subjectId, grade, topic.id]
+  );
+  const roundQuestions = useMemo(() => createQuestionRound({
+    questions: preparedQuestions,
+    subjectId,
+    grade,
+    topicId: topic.id,
+    difficulty,
+  }), [preparedQuestions, subjectId, grade, topic.id, difficulty]);
+  const totalQuestions = roundQuestions.length;
+  const phaseCount = Math.max(1, Math.ceil(totalQuestions / QUESTIONS_PER_PHASE));
+  const questions = roundQuestions.slice(
+    (currentPhase - 1) * QUESTIONS_PER_PHASE,
+    currentPhase * QUESTIONS_PER_PHASE
+  );
   const currentQuestion = questions[currentQuestionIdx];
+
+  const handleDifficultyChange = (event) => {
+    setDifficulty(event.target.value);
+    setCurrentQuestionIdx(0);
+    setScore(0);
+    setPhaseScore(0);
+    setCurrentPhase(1);
+    setSelectedAnswer(null);
+    setIsAnswerChecked(false);
+    setShowIntermission(false);
+    setShowResult(false);
+    setWrongAnswers([]);
+  };
 
   const handleAnswer = (index) => {
     if (isAnswerChecked) return;
@@ -41,9 +56,16 @@ export default function QuizGame({ subject, grade, topic, onComplete, onExit }) 
     if (selectedAnswer === null) return;
     
     setIsAnswerChecked(true);
-    if (selectedAnswer === currentQuestion.correct) {
+    const isWrong = selectedAnswer !== currentQuestion.correta;
+    recordQuestionAnswer(currentQuestion.id, isWrong);
+    if (!isWrong) {
       setScore(score + 100);
       setPhaseScore(phaseScore + 100);
+    } else {
+      setWrongAnswers(answers => [...answers, {
+        question: currentQuestion,
+        selected: currentQuestion.opcoes[selectedAnswer],
+      }]);
     }
   };
 
@@ -53,7 +75,7 @@ export default function QuizGame({ subject, grade, topic, onComplete, onExit }) 
       setSelectedAnswer(null);
       setIsAnswerChecked(false);
     } else {
-      if (currentPhase < 3) {
+      if (currentPhase < phaseCount) {
         setShowIntermission(true);
       } else {
         setShowResult(true);
@@ -76,7 +98,7 @@ export default function QuizGame({ subject, grade, topic, onComplete, onExit }) 
       <div className="quiz-result-card glass-card animate-float" style={{ animationDuration: '4s' }}>
         <div className="trophy-icon">⭐</div>
         <h2>Fase {currentPhase} Concluída!</h2>
-        <p>Você acertou {acertos} de 10 questões nesta etapa.</p>
+        <p>Você acertou {acertos} de {questions.length} questões nesta etapa.</p>
         
         <div className="score-display">
           <span className="xp-text">+{phaseScore} XP</span>
@@ -108,8 +130,8 @@ export default function QuizGame({ subject, grade, topic, onComplete, onExit }) 
 
   if (showResult) {
     const acertos = score / 100;
-    const nota = ((acertos / 30) * 10).toFixed(1);
-    const isApproved = acertos >= 15; // Passa se acertar metade
+    const nota = ((acertos / totalQuestions) * 10).toFixed(1);
+    const isApproved = acertos >= Math.ceil(totalQuestions / 2);
     
     return (
       <div className="quiz-result-card glass-card animate-float" style={{ animationDuration: '4s' }}>
@@ -119,7 +141,7 @@ export default function QuizGame({ subject, grade, topic, onComplete, onExit }) 
         <div className="exam-stats" style={{ display: 'flex', gap: '2rem', justifyContent: 'center', margin: '2rem 0' }}>
           <div className="stat-box">
             <span className="stat-label">Acertos</span>
-            <span className="stat-value" style={{ color: 'var(--primary)' }}>{acertos}/30</span>
+            <span className="stat-value" style={{ color: 'var(--primary)' }}>{acertos}/{totalQuestions}</span>
           </div>
           <div className="stat-box">
             <span className="stat-label">Nota Final</span>
@@ -132,6 +154,19 @@ export default function QuizGame({ subject, grade, topic, onComplete, onExit }) 
         </div>
         
         <p>{isApproved ? 'Excelente! Você dominou essa fase.' : 'Você precisa revisar este conteúdo. Não desista!'}</p>
+        {wrongAnswers.length > 0 && (
+          <section className="wrong-review" aria-labelledby="wrong-review-title">
+            <h3 id="wrong-review-title">Vamos revisar as questões que você errou</h3>
+            {wrongAnswers.map(({ question, selected }, index) => (
+              <article className="wrong-review-item" key={`${question.id}-${index}`}>
+                <strong>{question.pergunta}</strong>
+                <p className="wrong-answer">Sua resposta: {selected}</p>
+                <p className="right-answer">Resposta correta: {question.opcoes[question.correta]}</p>
+                <p>{question.explicacao}</p>
+              </article>
+            ))}
+          </section>
+        )}
         
         <button className="btn btn-primary" onClick={() => onComplete(score, !isApproved)} style={{ marginTop: '1rem', padding: '1rem 3rem' }}>
           Finalizar Fase
@@ -185,22 +220,77 @@ export default function QuizGame({ subject, grade, topic, onComplete, onExit }) 
             color: var(--text-muted);
             margin-bottom: 1rem;
           }
+          .wrong-review { margin: 2rem auto; text-align: left; max-width: 680px; }
+          .wrong-review h3 { color: var(--text-main); margin-bottom: 1rem; }
+          .wrong-review-item { margin: 0.75rem 0; padding: 1rem; border: 1px solid var(--border-light); border-radius: var(--radius-md); background: var(--background); }
+          .wrong-review-item strong { display: block; color: var(--text-main); }
+          .wrong-review-item p { font-size: 1rem; margin: 0.5rem 0 0; }
+          .wrong-review-item .wrong-answer { color: var(--danger); }
+          .wrong-review-item .right-answer { color: var(--success); font-weight: 700; }
         `}</style>
       </div>
     );
   }
 
-  const progress = ((currentPhase - 1) * 33) + ((currentQuestionIdx / questions.length) * 33);
+  if (!currentQuestion) {
+    return (
+      <div className="quiz-result-card glass-card">
+        <div className="trophy-icon">{preparedQuestions.length ? '🏁' : '📚'}</div>
+        <h2>{preparedQuestions.length ? 'Você concluiu este nível!' : 'Questões não encontradas'}</h2>
+        <p>
+          {preparedQuestions.length
+            ? 'Você já respondeu todas as perguntas inéditas disponíveis nesta seleção. Elas não serão repetidas. Escolha outra dificuldade ou volte ao mapa.'
+            : 'Este conteúdo ainda não tem perguntas preparadas no banco.'}
+        </p>
+        <label className="difficulty-filter" style={{ justifyContent: 'center', margin: '1.5rem auto' }}>
+          <span>Nível das questões</span>
+          <select value={difficulty} onChange={handleDifficultyChange}>
+            <option value="misturado">Misturado</option>
+            <option value="fácil">Fácil</option>
+            <option value="médio">Médio</option>
+            <option value="difícil">Difícil</option>
+          </select>
+        </label>
+        <button
+          className="btn btn-primary"
+          onClick={onExit}
+          style={{ marginTop: '1rem', padding: '1rem 2rem' }}
+        >
+          Voltar às matérias
+        </button>
+      </div>
+    );
+  }
+
+  const progress = (
+    ((currentPhase - 1) * QUESTIONS_PER_PHASE + currentQuestionIdx + 1) /
+    totalQuestions
+  ) * 100;
 
   // Renderiza opções dinamicamente (suporta Verdadeiro/Falso ou Múltipla Escolha)
   const isTrueFalse = currentQuestion.type === "boolean" || currentQuestion.options.length === 2;
+  const questionLength = currentQuestion.question.length;
+  const questionSizeClass = questionLength > 220
+    ? 'question-text-very-long'
+    : questionLength > 120
+      ? 'question-text-long'
+      : '';
 
   return (
     <div className="quiz-container">
+      <label className="difficulty-filter">
+        <span>Nível das questões</span>
+        <select value={difficulty} onChange={handleDifficultyChange}>
+          <option value="misturado">Misturado</option>
+          <option value="fácil">Fácil</option>
+          <option value="médio">Médio</option>
+          <option value="difícil">Difícil</option>
+        </select>
+      </label>
       <div className="quiz-header glass">
         <div className="subject-info">
           <span className="badge-grade">{grade}º Ano</span>
-          <span className="badge-topic">{topic.title} (Fase {currentPhase}/3)</span>
+          <span className="badge-topic">{topic.title} (Fase {currentPhase}/{phaseCount})</span>
         </div>
         <div className="progress-bar-wrapper">
           <div className="progress-bar-track">
@@ -214,14 +304,14 @@ export default function QuizGame({ subject, grade, topic, onComplete, onExit }) 
         <span className="question-count" style={{ color: subject.color }}>
           Desafio {currentQuestionIdx + 1}/{questions.length}
         </span>
-        <h2 className="question-text">{currentQuestion.question}</h2>
+        <h2 className={`question-text ${questionSizeClass}`}>{currentQuestion.pergunta}</h2>
       </div>
 
       <div className={`options-grid ${isTrueFalse ? 'grid-2' : 'grid-1'}`}>
-        {currentQuestion.options.map((option, index) => {
+        {currentQuestion.opcoes.map((option, index) => {
           let className = "option-card glass-card";
           if (isAnswerChecked) {
-            if (index === currentQuestion.correct) className += " correct";
+            if (index === currentQuestion.correta) className += " correct";
             else if (index === selectedAnswer) className += " incorrect";
           } else if (index === selectedAnswer) {
             className += " selected";
@@ -240,8 +330,8 @@ export default function QuizGame({ subject, grade, topic, onComplete, onExit }) 
                 {option}
               </div>
               <div className="option-indicator" style={isTrueFalse ? { position: 'absolute', top: '10px', right: '10px' } : {}}>
-                {isAnswerChecked && index === currentQuestion.correct && "✓"}
-                {isAnswerChecked && index === selectedAnswer && index !== currentQuestion.correct && "✕"}
+                {isAnswerChecked && index === currentQuestion.correta && "✓"}
+                {isAnswerChecked && index === selectedAnswer && index !== currentQuestion.correta && "✕"}
               </div>
             </button>
           );
@@ -273,6 +363,26 @@ export default function QuizGame({ subject, grade, topic, onComplete, onExit }) 
         .quiz-container {
           max-width: 800px;
           margin: 0 auto;
+        }
+        .difficulty-filter {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 0.75rem;
+          margin-bottom: 1rem;
+          color: var(--text-main);
+          font-weight: 700;
+        }
+        .difficulty-filter select {
+          padding: 0.65rem 0.9rem;
+          border: 1px solid var(--border-light);
+          border-radius: var(--radius-md);
+          background: white;
+          color: var(--text-main);
+          font: inherit;
+        }
+        @media (max-width: 520px) {
+          .difficulty-filter { justify-content: space-between; }
         }
 
         .quiz-header {
@@ -372,9 +482,102 @@ export default function QuizGame({ subject, grade, topic, onComplete, onExit }) 
         }
 
         .question-text {
-          font-size: 2.2rem;
+          font-size: clamp(1.35rem, 5vw, 2.2rem);
           color: var(--text-main);
           line-height: 1.3;
+          overflow-wrap: anywhere;
+        }
+
+        .question-text-long {
+          font-size: clamp(1.2rem, 4.2vw, 1.7rem);
+        }
+
+        .question-text-very-long {
+          font-size: clamp(1.05rem, 3.6vw, 1.4rem);
+          line-height: 1.45;
+        }
+
+        @media (max-width: 600px) {
+          .quiz-header {
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 1rem;
+            padding: 0.8rem;
+            border-radius: 18px;
+          }
+
+          .subject-info {
+            min-width: 0;
+            flex: 1 1 100%;
+            flex-wrap: wrap;
+          }
+
+          .badge-topic {
+            min-width: 0;
+            overflow-wrap: anywhere;
+          }
+
+          .progress-bar-wrapper {
+            min-width: 80px;
+          }
+
+          .score-badge {
+            padding: 0.4rem 0.75rem;
+            font-size: 1rem;
+          }
+
+          .question-card {
+            margin-bottom: 1.2rem;
+            padding: clamp(1.1rem, 5vw, 1.7rem) clamp(0.9rem, 4vw, 1.3rem);
+          }
+
+          .question-count {
+            margin-bottom: 0.65rem;
+            font-size: 0.78rem;
+            letter-spacing: 1px;
+          }
+
+          .options-grid {
+            gap: 0.7rem;
+            margin-bottom: 1.2rem;
+          }
+
+          .option-card {
+            gap: 0.8rem;
+            padding: 0.85rem;
+          }
+
+          .option-letter {
+            width: 36px;
+            height: 36px;
+          }
+
+          .option-text {
+            min-width: 0;
+            font-size: 1rem;
+            overflow-wrap: anywhere;
+          }
+
+          .action-section .btn {
+            max-width: 100% !important;
+            padding: 0.9rem !important;
+            font-size: 1rem !important;
+          }
+        }
+
+        @media (max-width: 380px) {
+          .grid-2 {
+            grid-template-columns: 1fr;
+          }
+
+          .quiz-header {
+            gap: 8px;
+          }
+
+          .badge-grade,
+          .badge-topic {
+            font-size: 0.78rem;
+          }
         }
 
         .options-grid {

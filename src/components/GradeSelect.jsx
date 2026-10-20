@@ -1,10 +1,7 @@
 import React from 'react';
 
 const grades = [
-  { id: '6', name: '6º Ano', color: '#10B981', desc: 'Iniciante' },
-  { id: '7', name: '7º Ano', color: '#4FB0FF', desc: 'Intermediário' },
-  { id: '8', name: '8º Ano', color: '#9D74FF', desc: 'Avançado' },
-  { id: '9', name: '9º Ano', color: '#F59E0B', desc: 'Mestre' },
+  { id: '9', name: '9º Ano', color: '#F59E0B', desc: '✨ Disponível', active: true },
 ];
 
 export default function GradeSelect({ subject, onSelectGrade, onBack }) {
@@ -19,11 +16,11 @@ export default function GradeSelect({ subject, onSelectGrade, onBack }) {
       </div>
 
       <div className="hero-section glass">
-        <h2 className="text-gradient" style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>
-          Escolha o seu Nível
+        <h2 className="text-gradient" style={{ fontSize: '2rem', marginBottom: '0.8rem' }}>
+          Turma de Aprendizado
         </h2>
-        <p style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>
-          Selecione o ano escolar para começar os desafios de {subject.name}.
+        <p style={{ fontSize: '1.05rem', color: 'var(--text-muted)' }}>
+          Atualmente, os desafios de {subject.name} estão disponíveis para o <strong>9º Ano</strong>.
         </p>
       </div>
 
@@ -31,9 +28,11 @@ export default function GradeSelect({ subject, onSelectGrade, onBack }) {
         {grades.map(grade => (
           <div 
             key={grade.id} 
-            className="grade-card glass-card"
-            style={{ '--grade-color': grade.color }}
-            onClick={() => onSelectGrade(grade.id)}
+            className={`grade-card glass-card ${!grade.active ? 'disabled-grade' : 'active-grade'}`}
+            style={{ '--grade-color': grade.color, opacity: grade.active ? 1 : 0.65, cursor: grade.active ? 'pointer' : 'not-allowed' }}
+            onClick={() => {
+              if (grade.active) onSelectGrade(grade.id);
+            }}
           >
             <div className="grade-number">{grade.id}º</div>
             <div className="grade-info">

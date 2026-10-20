@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { Star, Flame, Shield, Calculator, BookOpen, FlaskConical, Landmark, Globe, MessageCircle, Palette, Activity, Heart, Zap, ArrowRight } from 'lucide-react';
+import { Star, Flame, Shield, Calculator, BookOpen, FlaskConical, Landmark, Globe, MessageCircle, Palette, Activity, Heart, Zap, ArrowRight, Sparkles } from 'lucide-react';
 import StopGame from './StopGame';
-import MemoryGame from './MemoryGame';
+import AIStudyQuiz from './AIStudyQuiz';
 
 export default function Dashboard({ user, onNavigate, xp = 0, streak = 1, medals = [], completedTopics = [], onMinigameWin }) {
   const [showStop, setShowStop] = useState(false);
-  const [showMemory, setShowMemory] = useState(false);
+  const [showAIQuiz, setShowAIQuiz] = useState(false);
 
   const level = Math.floor(xp / 1000) + 1;
   const levelName = level >= 10 ? 'Mestre' : level >= 5 ? 'Aventureiro' : 'Explorador';
@@ -17,11 +17,6 @@ export default function Dashboard({ user, onNavigate, xp = 0, streak = 1, medals
   const handleStopComplete = (score) => {
     if (score > 0 && onMinigameWin) onMinigameWin(score);
     setShowStop(false);
-  };
-
-  const handleMemoryWin = (score) => {
-    if (score > 0 && onMinigameWin) onMinigameWin(score);
-    setShowMemory(false);
   };
 
   return (
@@ -53,6 +48,45 @@ export default function Dashboard({ user, onNavigate, xp = 0, streak = 1, medals
           <div className="progress-fill" style={{ width: `${progressPercent}%` }}></div>
         </div>
       </div>
+
+      {/* SELETOR DE MODO DE JOGO: SOLO vs BATALHA MULTIPLAYER */}
+      <div className="game-modes-section">
+        <div className="section-header">
+          <h3>Escolha Como Jogar:</h3>
+        </div>
+        <div className="game-modes-grid">
+          {/* Modo Solo */}
+          <div className="mode-selection-card solo-card" onClick={() => onNavigate && onNavigate('map')}>
+            <div className="mode-badge solo-badge">Fases & Trilha</div>
+            <div className="mode-icon-circle solo-circle">🎮</div>
+            <h4>Jogar Sozinho</h4>
+            <p>Avance no mapa, conquiste medalhas e pratique no seu ritmo.</p>
+            <span className="mode-action-link">Entrar no Mapa ›</span>
+          </div>
+
+          {/* Modo Batalha PvP */}
+          <div className="mode-selection-card pvp-card" onClick={() => onNavigate && onNavigate('battle')}>
+            <div className="mode-badge pvp-badge">⚡ AO VIVO</div>
+            <div className="mode-icon-circle pvp-circle">⚔️</div>
+            <h4>Batalha Online</h4>
+            <p>Duele em tempo real contra amigos ou oponentes conectados!</p>
+            <span className="mode-action-link pvp-link">Buscar Duelo 1v1 ›</span>
+          </div>
+        </div>
+      </div>
+
+      <button
+        className="ai-study-launch"
+        onClick={() => setShowAIQuiz(true)}
+        type="button"
+      >
+        <span className="ai-study-launch-icon"><Sparkles size={26} /></span>
+        <span className="ai-study-launch-copy">
+          <strong>Estudar com IA</strong>
+          <small>Crie questões ou receba explicações baseadas no currículo do 9º ano</small>
+        </span>
+        <ArrowRight size={21} />
+      </button>
 
       {/* Subjects Section */}
       <div className="subjects-section">
@@ -119,28 +153,200 @@ export default function Dashboard({ user, onNavigate, xp = 0, streak = 1, medals
         <button className="play-challenge-btn">Jogar <ArrowRight size={20} /></button>
       </div>
 
+      {/* Minigames Arcade Section */}
+      <div className="arcade-section" style={{ marginTop: '16px', marginBottom: '16px' }}>
+        <div className="section-header">
+          <h3>🎮 Fliperama Educativo</h3>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
+          <div
+            onClick={() => setShowStop(true)}
+            style={{
+              background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
+              border: '2px solid #fca5a5',
+              borderRadius: '18px',
+              padding: '14px',
+              cursor: 'pointer',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '4px'
+            }}
+          >
+            <span style={{ fontSize: '1.8rem' }}>🛑</span>
+            <strong style={{ fontSize: '0.95rem', color: '#991b1b' }}>Stop / Adedonha</strong>
+            <p style={{ fontSize: '0.72rem', color: '#b91c1c', margin: 0, lineHeight: 1.3 }}>Sorteie a letra e desafie seus conhecimentos!</p>
+          </div>
+
+        </div>
+      </div>
+
       {/* Modals for Minigames */}
       {showStop && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 1000, overflowY: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(6px)', zIndex: 1000, overflowY: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
           <StopGame 
+            profile={user}
             onExit={() => setShowStop(false)}
             onComplete={handleStopComplete}
           />
         </div>
       )}
 
-      {showMemory && (
-        <MemoryGame 
-          subjectId="geral"
-          onClose={() => setShowMemory(false)} 
-          onWin={handleMemoryWin} 
-        />
-      )}
+      {showAIQuiz && <AIStudyQuiz onClose={() => setShowAIQuiz(false)} />}
 
       <style>{`
         .dashboard-view {
           display: flex;
           flex-direction: column;
+        }
+
+        .ai-study-launch {
+          display: flex;
+          width: 100%;
+          align-items: center;
+          gap: 12px;
+          margin: 16px 0;
+          padding: 15px;
+          border: 1px solid #c4b5fd;
+          border-radius: 18px;
+          background: linear-gradient(110deg, #f5f3ff, #eff6ff);
+          color: #5b21b6;
+          cursor: pointer;
+          font: inherit;
+          text-align: left;
+          transition: transform 160ms ease, box-shadow 160ms ease;
+        }
+
+        .ai-study-launch:hover {
+          box-shadow: 0 8px 20px rgba(91, 33, 182, 0.12);
+          transform: translateY(-2px);
+        }
+
+        .ai-study-launch-icon {
+          display: grid;
+          width: 48px;
+          height: 48px;
+          flex: 0 0 auto;
+          place-items: center;
+          border-radius: 15px;
+          background: white;
+          color: #7c3aed;
+        }
+
+        .ai-study-launch-copy {
+          display: flex;
+          min-width: 0;
+          flex: 1;
+          flex-direction: column;
+          gap: 3px;
+        }
+
+        .ai-study-launch-copy strong {
+          font-size: 0.95rem;
+          font-weight: 900;
+        }
+
+        .ai-study-launch-copy small {
+          color: #64748b;
+          font-size: 0.78rem;
+          line-height: 1.35;
+        }
+
+        /* Game Modes Section */
+        .game-modes-section {
+          margin-bottom: 20px;
+        }
+
+        .game-modes-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+        }
+
+        .mode-selection-card {
+          background: white;
+          border-radius: 18px;
+          padding: 14px 12px;
+          box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
+          border: 2px solid #e2e8f0;
+          cursor: pointer;
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 6px;
+          position: relative;
+          transition: all 0.2s ease;
+        }
+
+        .mode-selection-card:hover {
+          transform: translateY(-3px);
+          box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+        }
+
+        .solo-card:hover {
+          border-color: #4fb0ff;
+        }
+
+        .pvp-card {
+          border-color: #d8b4fe;
+          background: linear-gradient(180deg, #ffffff 0%, #faf5ff 100%);
+        }
+
+        .pvp-card:hover {
+          border-color: #7c3aed;
+        }
+
+        .mode-badge {
+          font-size: 0.65rem;
+          font-weight: 800;
+          padding: 3px 8px;
+          border-radius: 8px;
+          text-transform: uppercase;
+        }
+
+        .solo-badge {
+          background: #e0f2fe;
+          color: #0284c7;
+        }
+
+        .pvp-badge {
+          background: #fee2e2;
+          color: #dc2626;
+          animation: pulseBadge 1.5s infinite;
+        }
+
+        @keyframes pulseBadge {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.7; }
+        }
+
+        .mode-icon-circle {
+          font-size: 1.8rem;
+          margin-top: 2px;
+        }
+
+        .mode-selection-card h4 {
+          font-size: 0.95rem;
+          font-weight: 800;
+          color: #1e293b;
+          margin-top: 2px;
+        }
+
+        .mode-selection-card p {
+          font-size: 0.72rem;
+          color: #64748b;
+          line-height: 1.35;
+          flex: 1;
+        }
+
+        .mode-action-link {
+          font-size: 0.75rem;
+          font-weight: 800;
+          color: #4fb0ff;
+          margin-top: 4px;
+        }
+
+        .mode-action-link.pvp-link {
+          color: #7c3aed;
         }
 
         /* Stats Card */

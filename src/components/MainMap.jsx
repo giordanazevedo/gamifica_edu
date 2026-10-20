@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { BookOpen, Calculator, FlaskConical, Landmark, Globe, MessageCircle, Palette, Activity, Heart, Trophy, X, Plus, BrainCircuit, OctagonAlert, Zap, Lock, Gamepad2, UserCircle2 } from 'lucide-react';
+import { BookOpen, Calculator, FlaskConical, Landmark, Globe, MessageCircle, Palette, Activity, Heart, Trophy, X, Plus, OctagonAlert, Zap, Gamepad2, UserCircle2 } from 'lucide-react';
 import { curriculum } from '../data/curriculum';
-import MemoryGame from './MemoryGame';
 import JumperGame from './JumperGame';
 import StopGame from './StopGame';
 
@@ -17,7 +16,7 @@ const allSubjects = [
   { id: 'religiao', name: 'Ensino Relig.', icon: <Heart size={18} />, color: '#8B5CF6' },
 ];
 
-export default function MainMap({ userGrade, completedTopics, onSelectTopic, onMinigameWin, initialSubjectId }) {
+export default function MainMap({ userGrade, currentProfile, completedTopics, onSelectTopic, onMinigameWin, initialSubjectId }) {
   const [activeSubjectId, setActiveSubjectId] = useState(initialSubjectId || allSubjects[0].id);
 
   React.useEffect(() => {
@@ -26,7 +25,6 @@ export default function MainMap({ userGrade, completedTopics, onSelectTopic, onM
     }
   }, [initialSubjectId]);
   const [showRanking, setShowRanking] = useState(false);
-  const [showMinigame, setShowMinigame] = useState(false);
   const [showJumper, setShowJumper] = useState(false);
   const [showStop, setShowStop] = useState(false);
   
@@ -55,7 +53,8 @@ export default function MainMap({ userGrade, completedTopics, onSelectTopic, onM
   };
   
   const activeSubject = allSubjects.find(s => s.id === activeSubjectId);
-  const topics = curriculum[activeSubjectId]?.[userGrade] || [];
+  const gradeToUse = (userGrade && userGrade !== 'Professor') ? userGrade : '9';
+  const topics = curriculum[activeSubjectId]?.[gradeToUse] || curriculum[activeSubjectId]?.['9'] || [];
 
   return (
     <div className="dashboard-wrapper">
@@ -126,14 +125,6 @@ export default function MainMap({ userGrade, completedTopics, onSelectTopic, onM
 
       {/* Banners de Minigames */}
       <div className="minigames-container" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-        <div className="fliperama-banner glass-card" onClick={() => setShowMinigame(true)} style={{ marginBottom: 0, padding: '1rem', borderColor: activeSubject.color }}>
-          <div className="fliperama-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><BrainCircuit size={32} color={activeSubject.color} /></div>
-          <div className="fliperama-info">
-            <h3 style={{ fontSize: '1.2rem', color: activeSubject.color }}>Memória</h3>
-            <p style={{ fontSize: '0.85rem' }}>Ache os pares!</p>
-          </div>
-        </div>
-
         <div className="fliperama-banner glass-card" onClick={() => setShowStop(true)} style={{ marginBottom: 0, padding: '1rem', borderColor: activeSubject.color }}>
           <div className="fliperama-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><OctagonAlert size={32} color={activeSubject.color} /></div>
           <div className="fliperama-info">
@@ -149,6 +140,7 @@ export default function MainMap({ userGrade, completedTopics, onSelectTopic, onM
             <p style={{ fontSize: '0.85rem' }}>Farme muito XP!</p>
           </div>
         </div>
+
       </div>
 
       {/* Grid Livre de Conteúdos */}
@@ -197,17 +189,6 @@ export default function MainMap({ userGrade, completedTopics, onSelectTopic, onM
         </div>
       )}
 
-      {showMinigame && (
-        <MemoryGame 
-          subjectId={activeSubjectId}
-          onClose={() => setShowMinigame(false)} 
-          onWin={(xp) => {
-            onMinigameWin(xp);
-            setShowMinigame(false);
-          }} 
-        />
-      )}
-
       {showJumper && (
         <JumperGame 
           onClose={() => setShowJumper(false)} 
@@ -219,8 +200,9 @@ export default function MainMap({ userGrade, completedTopics, onSelectTopic, onM
       )}
 
       {showStop && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 1000, overflowY: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(6px)', zIndex: 1000, overflowY: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
           <StopGame 
+            profile={currentProfile}
             onExit={() => setShowStop(false)}
             onComplete={(xp) => {
               onMinigameWin(xp);
