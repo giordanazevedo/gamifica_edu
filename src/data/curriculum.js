@@ -17,10 +17,13 @@ export const curriculum = {
       { id: 'oracoes_coordenadas', title: 'Orações Coordenadas', desc: 'Estruturação de orações coordenadas', icon: '🔗' },
     ],
     '9': [
-      { id: 'resenha_ensaio', title: 'Resenha, Ensaio e Manifesto', desc: 'Resenha crítica, ensaio e manifesto', icon: '📑' },
-      { id: 'oracoes_subordinadas', title: 'Orações Subordinadas', desc: 'Substantivas, adjetivas e adverbiais', icon: '🔄' },
-      { id: 'pontuacao_avancada', title: 'Pontuação e Coesão', desc: 'Pontuação avançada e coesão textual complexa', icon: '🖋️' },
-      { id: 'figuras_pensamento', title: 'Figuras de Pensamento', desc: 'Figuras de pensamento e sintaxe', icon: '🧠' },
+      { id: 'multissemiose_publicidade', title: 'Multissemiose e Publicidade', desc: 'Linguagem visual, sonora, persuasão e campanhas (EF89LP07/11)', icon: '📢' },
+      { id: 'entrevistas_oralidade', title: 'Entrevistas e Tomada de Notas', desc: 'Roteiros de entrevista, escuta ativa e síntese de videoaulas (EF89LP13/28)', icon: '🎙️' },
+      { id: 'argumentacao_reivindicacao', title: 'Argumentação e Reivindicação', desc: 'Propostas de intervenção, sustentação e refutação (EF89LP20/22/23)', icon: '🗣️' },
+      { id: 'resenha_citacoes', title: 'Resenha Crítica e Citações', desc: 'Curadoria de fontes, paráfrases e discurso reportado (EF89LP24/26)', icon: '📑' },
+      { id: 'modalizacao_epistemica', title: 'Modalização Linguística', desc: 'Modalizadores apreciativos, epistêmicos e asseverativos (EF89LP16/31)', icon: '🔍' },
+      { id: 'texto_dramatico_poesia', title: 'Texto Dramático e Poesia Visual', desc: 'Teatro, paródias, ciberpoemas, haicais e lambe-lambes (EF89LP34/36)', icon: '🎭' },
+      { id: 'figuras_linguagem', title: 'Figuras de Linguagem', desc: 'Ironia, eufemismo, antítese, aliteração e assonância (EF89LP37)', icon: '✨' },
     ]
   },
   matematica: {
