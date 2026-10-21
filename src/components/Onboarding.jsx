@@ -83,18 +83,19 @@ export default function Onboarding({ onComplete }) {
             <h2 className="welcome-title" style={{ color: '#4FB0FF' }}>Bem-vindo(a)!</h2>
             <p className="welcome-subtitle">Prepare-se para uma aventura incrível no seu aprendizado!</p>
 
-            <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center', margin: '2rem auto', maxWidth: '235px' }}>
-              <img src="/botoes aluno e professor.png" alt="Botões" style={{ width: '100%', height: 'auto', display: 'block' }} />
-              <div
-                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '50%', cursor: 'pointer', zIndex: 10 }}
+            <div className="splash-actions">
+              <button
+                className="splash-button"
                 onClick={() => { setRole('aluno'); setStep('login'); setFormError(''); }}
-                title="Sou Aluno"
-              />
-              <div
-                style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', height: '50%', cursor: 'pointer', zIndex: 10 }}
-                onClick={() => { setRole('professor'); setStep('login'); setFormError(''); }}
-                title="Sou Professor"
-              />
+              >
+                ENTRAR
+              </button>
+              <button
+                className="splash-button"
+                onClick={() => { setRole('aluno'); setStep('register'); setFormError(''); }}
+              >
+                CRIAR CONTA
+              </button>
             </div>
           </div>
         )}
@@ -257,14 +258,15 @@ export default function Onboarding({ onComplete }) {
           display: flex;
           align-items: center;
           justify-content: center;
-          min-height: 80vh;
+          min-height: 100vh;
           padding: 1rem;
           background: transparent;
         }
 
         .auth-card {
           width: 100%;
-          padding: 2.5rem 2rem;
+          max-width: 600px;
+          padding: 3rem 2rem;
           background: rgba(255, 255, 255, 0.97);
           backdrop-filter: blur(10px);
           text-align: center;
@@ -293,9 +295,83 @@ export default function Onboarding({ onComplete }) {
 
         .welcome-subtitle {
           color: var(--text-muted);
-          font-size: 1.1rem;
-          margin-bottom: 2.5rem;
+          font-size: 1.25rem;
+          line-height: 1.4;
+          margin-bottom: 0;
           font-weight: 600;
+        }
+
+        .splash-screen {
+          width: 100%;
+        }
+
+        .splash-screen .auth-logo {
+          max-width: 250px;
+          margin-bottom: 2rem;
+        }
+
+        .splash-screen .welcome-title {
+          font-size: 2.75rem;
+          margin-bottom: 0.75rem;
+        }
+
+        .splash-actions {
+          display: flex;
+          flex-direction: column;
+          gap: 1.25rem;
+          margin-top: 3rem;
+        }
+
+        .splash-button {
+          width: 100%;
+          min-height: 76px;
+          padding: 1rem;
+          border: 0;
+          border-radius: 20px;
+          background: linear-gradient(110deg, #4baeff, #2863ed);
+          box-shadow: 0 8px 16px rgba(47, 131, 242, 0.24), inset 0 -4px 0 rgba(0, 0, 0, 0.12);
+          color: #fff;
+          cursor: pointer;
+          font: inherit;
+          font-size: 1.4rem;
+          font-weight: 900;
+          transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .splash-button:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 12px 20px rgba(47, 131, 242, 0.3), inset 0 -4px 0 rgba(0, 0, 0, 0.12);
+        }
+
+        .splash-button:active {
+          transform: translateY(1px);
+        }
+
+        .splash-button:focus-visible {
+          outline: 3px solid #1d4ed8;
+          outline-offset: 3px;
+        }
+
+        @media (max-width: 480px) {
+          .auth-card {
+            padding: 2.5rem 1.5rem;
+          }
+
+          .splash-screen .auth-logo {
+            max-width: 220px;
+          }
+
+          .splash-screen .welcome-title {
+            font-size: 2.3rem;
+          }
+
+          .welcome-subtitle {
+            font-size: 1.1rem;
+          }
+
+          .splash-actions {
+            margin-top: 2.5rem;
+          }
         }
 
         .form-alert {
