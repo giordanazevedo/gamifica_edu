@@ -7,8 +7,11 @@ import {
   onAuthStateChanged,
   updateProfile,
   GoogleAuthProvider,
-  signInWithPopup
+  signInWithPopup,
+  signInWithCredential
 } from 'firebase/auth';
+import { Capacitor } from '@capacitor/core';
+import { SocialLogin } from '@capgo/capacitor-social-login';
 import {
   doc,
   setDoc,
@@ -20,9 +23,12 @@ import {
   limit,
   getDocs,
   serverTimestamp,
-  increment
+  increment,
+  runTransaction
 } from 'firebase/firestore';
 import { auth, db } from '../firebase';
+
+let nativeGoogleLoginInitialization = null;
 
 export function useAuth() {
   const [user, setUser] = useState(null);       // dados do Firebase Auth
@@ -123,8 +129,38 @@ export function useAuth() {
   const loginWithGoogle = async ({ role, inviteCode, subject }) => {
     setError(null);
     try {
-      const provider = new GoogleAuthProvider();
-      const cred = await signInWithPopup(auth, provider);
+      let cred;
+      if (Capacitor.getPlatform() === 'android') {
+        const webClientId = import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID?.trim();
+        if (!webClientId) {
+          throw new Error('O login Google no aplicativo ainda precisa ser configurado.');
+        }
+
+        if (!nativeGoogleLoginInitialization) {
+          nativeGoogleLoginInitialization = SocialLogin.initialize({
+            google: { webClientId, mode: 'online' },
+          }).catch((initializationError) => {
+            nativeGoogleLoginInitialization = null;
+            throw initializationError;
+          });
+        }
+        await nativeGoogleLoginInitialization;
+
+        const googleResult = await SocialLogin.login({ provider: 'google' });
+        const idToken = googleResult.result?.idToken;
+        if (!idToken) {
+          throw new Error('O Google não retornou um token de autenticação. Tente novamente.');
+        }
+
+        const credential = GoogleAuthProvider.credential(
+          idToken,
+          googleResult.result.accessToken?.token || undefined
+        );
+        cred = await signInWithCredential(auth, credential);
+      } else {
+        const provider = new GoogleAuthProvider();
+        cred = await signInWithPopup(auth, provider);
+      }
       const firebaseUser = cred.user;
 
       // Verifica se já tem perfil no Firestore
@@ -170,7 +206,10 @@ export function useAuth() {
       return { success: true };
     } catch (e) {
       if (e.code === 'auth/popup-closed-by-user') return { success: false, error: '' };
-      const msg = translateFirebaseError(e.code);
+      if (e.code === 'USER_CANCELLED' || e.message?.toLowerCase().includes('cancel')) {
+        return { success: false, error: '' };
+      }
+      const msg = e.code ? translateFirebaseError(e.code) : e.message || 'Não foi possível entrar com Google.';
       setError(msg);
       return { success: false, error: msg };
     }
@@ -252,6 +291,61 @@ export function useAuth() {
     }
   }, [user]);
 
+  const addQuizReward = useCallback(async ({ earnedXp, completedTopicKey, medal }) => {
+    if (!user) {
+      throw new Error('Sua sessão expirou. Entre novamente para salvar seus pontos.');
+    }
+    if (!Number.isFinite(earnedXp) || earnedXp < 0) {
+      throw new Error('A pontuação recebida é inválida. Tente finalizar o quiz novamente.');
+    }
+
+    const ref = doc(db, 'users', user.uid);
+    try {
+      const updatedProfile = await runTransaction(db, async (transaction) => {
+        const snap = await transaction.get(ref);
+        if (!snap.exists()) {
+          throw new Error('Não encontramos seu perfil para salvar os pontos. Entre novamente.');
+        }
+
+        const currentProfile = snap.data();
+        const currentXp = Number.isFinite(currentProfile.xp) ? currentProfile.xp : 0;
+        const nextXp = currentXp + earnedXp;
+        const completedTopics = Array.isArray(currentProfile.completedTopics)
+          ? currentProfile.completedTopics
+          : [];
+        const medals = Array.isArray(currentProfile.medals) ? currentProfile.medals : [];
+        const nextCompletedTopics = completedTopicKey && !completedTopics.includes(completedTopicKey)
+          ? [...completedTopics, completedTopicKey]
+          : completedTopics;
+        const nextMedals = medal && !medals.some(existingMedal => existingMedal.id === medal.id)
+          ? [...medals, medal]
+          : medals;
+
+        transaction.update(ref, {
+          xp: nextXp,
+          level: Math.floor(nextXp / 1000) + 1,
+          completedTopics: nextCompletedTopics,
+          medals: nextMedals,
+          lastSeen: serverTimestamp(),
+        });
+
+        return {
+          ...currentProfile,
+          xp: nextXp,
+          level: Math.floor(nextXp / 1000) + 1,
+          completedTopics: nextCompletedTopics,
+          medals: nextMedals,
+        };
+      });
+
+      setProfile(updatedProfile);
+      return updatedProfile;
+    } catch (e) {
+      console.error('Erro ao salvar recompensa do quiz:', e);
+      throw e;
+    }
+  }, [user]);
+
   // Salva recompensa de batalha com increment atômico no Firestore
   const addBattleReward = useCallback(async (earnedXp, isWinner) => {
     if (!user) return 0;
@@ -283,18 +377,13 @@ export function useAuth() {
 
   // Busca ranking global (top 50)
   const fetchRanking = useCallback(async () => {
-    try {
-      const q = query(
-        collection(db, 'users'),
-        orderBy('xp', 'desc'),
-        limit(50)
-      );
-      const snap = await getDocs(q);
-      return snap.docs.map((d, i) => ({ rank: i + 1, ...d.data() }));
-    } catch (e) {
-      console.error('Erro ao buscar ranking:', e);
-      return [];
-    }
+    const q = query(
+      collection(db, 'users'),
+      orderBy('xp', 'desc'),
+      limit(50)
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d, i) => ({ rank: i + 1, ...d.data() }));
   }, []);
 
   return {
@@ -310,6 +399,7 @@ export function useAuth() {
     updateAccountProfile,
     completeFirstVisitSetup,
     saveProgress,
+    addQuizReward,
     addBattleReward,
     fetchRanking,
     reloadProfile: () => user && loadProfile(user.uid),
@@ -318,6 +408,7 @@ export function useAuth() {
 
 // Traduz erros do Firebase para PT-BR
 function translateFirebaseError(code) {
+  const currentDomain = typeof window !== 'undefined' ? window.location.hostname : 'este endereço';
   const map = {
     'auth/email-already-in-use': 'Este e-mail já está cadastrado.',
     'auth/invalid-email': 'E-mail inválido.',
@@ -327,6 +418,7 @@ function translateFirebaseError(code) {
     'auth/invalid-credential': 'E-mail ou senha incorretos.',
     'auth/too-many-requests': 'Muitas tentativas. Tente novamente mais tarde.',
     'auth/network-request-failed': 'Erro de conexão. Verifique sua internet.',
+    'auth/unauthorized-domain': `O domínio "${currentDomain}" não está autorizado para login com Google. Adicione-o em Firebase Console > Authentication > Configurações > Domínios autorizados.`,
   };
   return map[code] || `Erro: ${code}`;
 }

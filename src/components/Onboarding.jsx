@@ -80,7 +80,7 @@ export default function Onboarding({ onComplete }) {
         {step === 'splash' && (
           <div className="splash-screen">
             <img src="/logo.png" alt="GamificaEdu Logo" className="auth-logo" />
-            <h2 className="welcome-title" style={{ color: '#4FB0FF' }}>Bem-vindo(a)!</h2>
+            <h2 className="welcome-title" style={{ color: '#dc2626' }}>Bem-vindo(a)!</h2>
             <p className="welcome-subtitle">Prepare-se para uma aventura incrível no seu aprendizado!</p>
 
             <div className="splash-actions">
@@ -154,7 +154,7 @@ export default function Onboarding({ onComplete }) {
                 </div>
               </div>
 
-              <button type="submit" className="btn btn-primary w-100" disabled={isLoading}>
+              <button type="submit" className="btn btn-primary w-100 login-submit-btn" disabled={isLoading}>
                 {isLoading ? <Loader2 size={20} className="spin" /> : 'Entrar ➔'}
               </button>
             </form>
@@ -200,7 +200,7 @@ export default function Onboarding({ onComplete }) {
                     <select className="custom-input" value={regGrade} onChange={e => setRegGrade(e.target.value)} disabled={isLoading}>
                       <option value="9">🎓 9º Ano</option>
                     </select>
-                    <small style={{ fontSize: '0.72rem', color: '#6366f1', marginTop: '4px', display: 'block' }}>
+                    <small style={{ fontSize: '0.72rem', color: '#0284c7', marginTop: '4px', display: 'block' }}>
                       🚀 O GamificaEdu está focado no 9º Ano.
                     </small>
                   </div>
@@ -259,19 +259,26 @@ export default function Onboarding({ onComplete }) {
           align-items: center;
           justify-content: center;
           min-height: 100vh;
+          min-height: 100svh;
+          min-height: 100dvh;
           padding: 1rem;
           background: transparent;
         }
 
         .auth-card {
+          --primary: #dc2626;
+          --primary-light: #fca5a5;
+          --border-light: rgba(220, 38, 38, 0.16);
+          --shadow-glow-primary: 0 10px 25px -5px rgba(220, 38, 38, 0.3);
           width: 100%;
           max-width: 600px;
           padding: 3rem 2rem;
-          background: rgba(255, 255, 255, 0.97);
-          backdrop-filter: blur(10px);
+          background: transparent;
+          backdrop-filter: none;
           text-align: center;
           border-radius: 32px;
-          box-shadow: 0 20px 40px rgba(0,0,0,0.08), 0 0 0 8px rgba(255,255,255,0.4);
+          border-color: transparent;
+          box-shadow: none;
         }
 
         .auth-logo {
@@ -318,29 +325,32 @@ export default function Onboarding({ onComplete }) {
         .splash-actions {
           display: flex;
           flex-direction: column;
-          gap: 1.25rem;
+          width: min(100%, 520px);
+          gap: 1rem;
           margin-top: 3rem;
+          margin-right: auto;
+          margin-left: auto;
         }
 
         .splash-button {
           width: 100%;
-          min-height: 76px;
-          padding: 1rem;
+          min-height: 64px;
+          padding: 0.85rem 1rem;
           border: 0;
           border-radius: 20px;
-          background: linear-gradient(110deg, #4baeff, #2863ed);
-          box-shadow: 0 8px 16px rgba(47, 131, 242, 0.24), inset 0 -4px 0 rgba(0, 0, 0, 0.12);
+          background: linear-gradient(110deg, #f87171, #dc2626);
+          box-shadow: 0 8px 16px rgba(220, 38, 38, 0.24), inset 0 -4px 0 rgba(0, 0, 0, 0.12);
           color: #fff;
           cursor: pointer;
           font: inherit;
-          font-size: 1.4rem;
+          font-size: 1.25rem;
           font-weight: 900;
           transition: transform 0.2s, box-shadow 0.2s;
         }
 
         .splash-button:hover {
           transform: translateY(-2px);
-          box-shadow: 0 12px 20px rgba(47, 131, 242, 0.3), inset 0 -4px 0 rgba(0, 0, 0, 0.12);
+          box-shadow: 0 12px 20px rgba(220, 38, 38, 0.3), inset 0 -4px 0 rgba(0, 0, 0, 0.12);
         }
 
         .splash-button:active {
@@ -348,7 +358,7 @@ export default function Onboarding({ onComplete }) {
         }
 
         .splash-button:focus-visible {
-          outline: 3px solid #1d4ed8;
+          outline: 3px solid #b91c1c;
           outline-offset: 3px;
         }
 
@@ -371,6 +381,11 @@ export default function Onboarding({ onComplete }) {
 
           .splash-actions {
             margin-top: 2.5rem;
+          }
+
+          .splash-button {
+            min-height: 58px;
+            font-size: 1.15rem;
           }
         }
 
@@ -490,6 +505,16 @@ export default function Onboarding({ onComplete }) {
         }
         .custom-input:disabled { opacity: 0.6; }
 
+        .login-submit-btn {
+          background: linear-gradient(135deg, #ef4444, #b91c1c);
+          box-shadow: 0 8px 18px rgba(185, 28, 28, 0.24);
+        }
+
+        .login-submit-btn:hover {
+          background: linear-gradient(135deg, #f87171, #dc2626);
+          box-shadow: 0 12px 22px rgba(185, 28, 28, 0.3);
+        }
+
         .pass-toggle {
           position: absolute;
           right: 14px;
@@ -521,10 +546,10 @@ export default function Onboarding({ onComplete }) {
           font-weight: 900;
           font-size: 1.1rem;
           color: #fff;
-          background: linear-gradient(135deg, #10B981, #059669);
+          background: linear-gradient(135deg, #ef4444, #b91c1c);
           border: none;
           border-radius: 16px;
-          box-shadow: 0 8px 15px rgba(16, 185, 129, 0.3), inset 0 -3px 0 rgba(0,0,0,0.1);
+          box-shadow: 0 8px 15px rgba(185, 28, 28, 0.26), inset 0 -3px 0 rgba(0,0,0,0.1);
           cursor: pointer;
           transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
           display: flex;
@@ -535,9 +560,68 @@ export default function Onboarding({ onComplete }) {
         }
         .w-100:hover:not(:disabled) {
           transform: translateY(-3px);
-          box-shadow: 0 12px 20px rgba(16, 185, 129, 0.4), inset 0 -3px 0 rgba(0,0,0,0.1);
+          background: linear-gradient(135deg, #f87171, #dc2626);
+          box-shadow: 0 12px 20px rgba(185, 28, 28, 0.34), inset 0 -3px 0 rgba(0,0,0,0.1);
         }
         .w-100:disabled { opacity: 0.7; cursor: not-allowed; }
+
+        .login-screen .form-title {
+          position: relative;
+          width: fit-content;
+          max-width: 100%;
+          margin-right: auto;
+          margin-left: auto;
+          padding-bottom: 0.7rem;
+          color: #b91c1c;
+        }
+
+        .login-screen .form-title::after {
+          position: absolute;
+          right: 18%;
+          bottom: 0;
+          left: 18%;
+          height: 4px;
+          border-radius: 999px;
+          background: linear-gradient(
+            90deg,
+            #dc2626 0%,
+            #ef4444 58%,
+            #facc15 58%,
+            #facc15 73%,
+            #65a30d 73%,
+            #65a30d 86%,
+            #0284c7 86%,
+            #0284c7 100%
+          );
+          content: '';
+        }
+
+        .login-screen .modern-back:hover {
+          color: #b91c1c;
+        }
+
+        .login-screen .custom-input:focus {
+          border-color: #dc2626;
+          box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.14);
+        }
+
+        .login-screen .login-submit-btn {
+          background: linear-gradient(135deg, #ef4444, #b91c1c);
+          box-shadow: 0 8px 18px rgba(185, 28, 28, 0.24), inset 0 -3px 0 rgba(0, 0, 0, 0.1);
+        }
+
+        .login-screen .login-submit-btn:hover:not(:disabled) {
+          background: linear-gradient(135deg, #f87171, #dc2626);
+          box-shadow: 0 12px 22px rgba(185, 28, 28, 0.3), inset 0 -3px 0 rgba(0, 0, 0, 0.1);
+        }
+
+        .login-screen .toggle-form span {
+          color: #dc2626;
+        }
+
+        .login-screen .toggle-form span:hover {
+          color: #991b1b;
+        }
 
         .spin {
           animation: spin 1s linear infinite;

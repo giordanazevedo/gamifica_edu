@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { doc, onSnapshot } from 'firebase/firestore';
 import {
   Swords,
   Users,
@@ -16,10 +17,12 @@ import {
   Trash2
 } from 'lucide-react';
 import AvatarDisplay from './AvatarDisplay';
+import { db } from '../firebase';
 import {
   getOrGenerateFriendCode,
   fetchOnlinePlayers,
   addFriendByCode,
+  addFriendByUid,
   fetchFriendsDetails,
   removeFriend,
   sendBattleInvite,
@@ -36,6 +39,7 @@ export default function BattleHub({
   const [activeTab, setActiveTab] = useState('quick'); // 'quick' | 'friends' | 'online'
   const [friendCodeInput, setFriendCodeInput] = useState('');
   const [addFriendLoading, setAddFriendLoading] = useState(false);
+  const [addingOnlineFriendUid, setAddingOnlineFriendUid] = useState(null);
   const [addFriendFeedback, setAddFriendFeedback] = useState(null);
 
   const [onlinePlayers, setOnlinePlayers] = useState([]);
@@ -43,37 +47,104 @@ export default function BattleHub({
 
   const [friendsList, setFriendsList] = useState([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
+  const friendsListRef = useRef(friendsList);
 
   const [selectedSubject, setSelectedSubject] = useState('geral');
   const [searchingMatch, setSearchingMatch] = useState(false);
   const [currentMatchId, setCurrentMatchId] = useState(null);
+  const startedMatchIds = useRef(new Set());
 
   const [copiedCode, setCopiedCode] = useState(false);
   const myFriendCode = getOrGenerateFriendCode(profile);
 
-  // Carrega lista de amigos e jogadores online
-  useEffect(() => {
-    loadFriends();
-    loadOnlinePlayers();
-  }, [profile?.friends]);
-
-  const loadFriends = async () => {
+  const loadFriends = useCallback(async (showLoading = true) => {
     if (!profile?.friends || profile.friends.length === 0) {
       setFriendsList([]);
+      setLoadingFriends(false);
       return;
     }
-    setLoadingFriends(true);
+    if (showLoading) setLoadingFriends(true);
     const list = await fetchFriendsDetails(profile.friends);
     setFriendsList(list);
     setLoadingFriends(false);
-  };
+  }, [profile]);
 
-  const loadOnlinePlayers = async () => {
-    setLoadingOnline(true);
+  useEffect(() => {
+    friendsListRef.current = friendsList;
+  }, [friendsList]);
+
+  const loadOnlinePlayers = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoadingOnline(true);
     const list = await fetchOnlinePlayers(user?.uid);
     setOnlinePlayers(list);
     setLoadingOnline(false);
-  };
+  }, [user?.uid]);
+
+  useEffect(() => {
+    loadFriends();
+  }, [loadFriends]);
+
+  const refreshFriendStatuses = useCallback(async () => {
+    const currentFriends = friendsListRef.current;
+    if (currentFriends.length === 0) return;
+
+    const latestFriends = await fetchFriendsDetails(currentFriends.map((friend) => friend.uid));
+    const latestByUid = new Map(latestFriends.map((friend) => [friend.uid, friend.isOnline]));
+    setFriendsList((current) => {
+      let hasChanged = false;
+      const updated = current.map((friend) => {
+        const isOnline = latestByUid.get(friend.uid) ?? false;
+        if (friend.isOnline !== isOnline) hasChanged = true;
+        return friend.isOnline === isOnline ? friend : { ...friend, isOnline };
+      });
+      return hasChanged ? updated : current;
+    });
+  }, []);
+
+  useEffect(() => {
+    loadOnlinePlayers();
+    refreshFriendStatuses();
+    const interval = setInterval(() => {
+      loadOnlinePlayers(false);
+      refreshFriendStatuses();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [loadOnlinePlayers, refreshFriendStatuses]);
+
+  useEffect(() => {
+    if (!currentMatchId) return undefined;
+
+    return onSnapshot(
+      doc(db, 'battles', currentMatchId),
+      (battleSnapshot) => {
+        if (!battleSnapshot.exists()) {
+          setSearchingMatch(false);
+          setCurrentMatchId(null);
+          alert('A sala de batalha não está mais disponível. Tente novamente.');
+          return;
+        }
+
+        const battle = battleSnapshot.data();
+        if (battle.status === 'in_progress' && battle.player2?.uid) {
+          setSearchingMatch(false);
+          setCurrentMatchId(null);
+          if (!startedMatchIds.current.has(currentMatchId)) {
+            startedMatchIds.current.add(currentMatchId);
+            onStartBattle(currentMatchId);
+          }
+        } else if (battle.status === 'cancelled') {
+          setSearchingMatch(false);
+          setCurrentMatchId(null);
+        }
+      },
+      (error) => {
+        console.error('Erro ao acompanhar a busca por oponente:', error);
+        setSearchingMatch(false);
+        setCurrentMatchId(null);
+        alert('Não foi possível acompanhar a busca por oponente. Tente novamente.');
+      }
+    );
+  }, [currentMatchId, onStartBattle]);
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(myFriendCode);
@@ -88,20 +159,39 @@ export default function BattleHub({
     setAddFriendLoading(true);
     setAddFriendFeedback(null);
 
-    const res = await addFriendByCode(user.uid, profile?.friends || [], friendCodeInput);
+    const res = await addFriendByCode(user.uid, friendCodeInput);
     setAddFriendLoading(false);
 
     if (res.success) {
       setAddFriendFeedback({ type: 'success', text: `Amigo adicionado com sucesso! 🎉` });
       setFriendCodeInput('');
-      setFriendsList(prev => [...prev, res.friend]);
+      setFriendsList((current) => current.some((friend) => friend.uid === res.friend.uid)
+        ? current
+        : [...current, res.friend]);
+    } else {
+      setAddFriendFeedback({ type: 'error', text: res.error });
+    }
+  };
+
+  const handleAddOnlineFriend = async (player) => {
+    setAddingOnlineFriendUid(player.uid);
+    setAddFriendFeedback(null);
+
+    const res = await addFriendByUid(user.uid, player.uid);
+    setAddingOnlineFriendUid(null);
+
+    if (res.success) {
+      setAddFriendFeedback({ type: 'success', text: `${player.name} foi adicionado como amigo!` });
+      setFriendsList((current) => current.some((friend) => friend.uid === player.uid)
+        ? current
+        : [...current, res.friend]);
     } else {
       setAddFriendFeedback({ type: 'error', text: res.error });
     }
   };
 
   const handleRemoveFriend = async (friendUid) => {
-    const res = await removeFriend(user.uid, profile?.friends || [], friendUid);
+    const res = await removeFriend(user.uid, friendUid);
     if (res.success) {
       setFriendsList(prev => prev.filter(f => f.uid !== friendUid));
     }
@@ -122,8 +212,12 @@ export default function BattleHub({
     setSearchingMatch(true);
     const res = await findOrCreateQuickMatch(profile, selectedSubject);
     if (res.success) {
-      setCurrentMatchId(res.battleId);
-      onStartBattle(res.battleId);
+      if (res.isHost) {
+        setCurrentMatchId(res.battleId);
+      } else {
+        setSearchingMatch(false);
+        onStartBattle(res.battleId);
+      }
     } else {
       setSearchingMatch(false);
       alert(`Não foi possível preparar a batalha: ${res.error || 'verifique sua conexão e tente novamente.'}`);
@@ -135,6 +229,7 @@ export default function BattleHub({
       await cancelQuickMatch(currentMatchId);
     }
     setSearchingMatch(false);
+    setCurrentMatchId(null);
   };
 
   return (
@@ -144,8 +239,8 @@ export default function BattleHub({
         <div className="mode-banner">
           <div className="mode-info">
             <span className="mode-tag">Modo Selecionado</span>
-            <h2>⚔️ Batalha PvP Online</h2>
-            <p>Jogue em tempo real contra amigos ou oponentes da rede!</p>
+            <h2>⚔️ Duelo 1x1</h2>
+            <p>Desafie amigos ou encontre outro jogador para uma partida em tempo real!</p>
           </div>
           <button className="switch-to-solo-btn" onClick={onNavigateSolo}>
             🎮 Jogar Sozinho
@@ -229,10 +324,22 @@ export default function BattleHub({
 
             {searchingMatch ? (
               <div className="searching-box">
-                <Loader2 size={24} className="spin-icon" />
-                <span>Preparando questões do material e buscando oponente...</span>
+                <div className="searching-orbit" aria-hidden="true">
+                  <span className="searching-orbit-ring" />
+                  <span className="searching-orbit-core"><Swords size={25} /></span>
+                  <span className="searching-orbit-dot" />
+                </div>
+                <span className="searching-kicker">BUSCA EM ANDAMENTO</span>
+                <strong>Aguardando um oponente</strong>
+                <span className="searching-description">
+                  Assim que outro jogador entrar nesta batalha, vocês vão para a arena.
+                </span>
+                <div className="searching-status">
+                  <span className="searching-status-dot" />
+                  Procurando em {selectedSubject === 'geral' ? 'todas as matérias' : selectedSubject}
+                </div>
                 <button className="cancel-search-btn" onClick={handleCancelQuickMatch}>
-                  Cancelar
+                  Cancelar busca
                 </button>
               </div>
             ) : (
@@ -327,8 +434,14 @@ export default function BattleHub({
         <div className="tab-pane online-pane">
           <div className="online-header-info">
             <Globe size={18} color="#10b981" />
-            <span>Jogadores cadastrados no GamificaEdu para desafiar:</span>
+            <span>Jogadores conectados agora. Adicione-os como amigos ou desafie-os:</span>
           </div>
+
+          {addFriendFeedback && (
+            <div className={`feedback-alert ${addFriendFeedback.type}`} role="status">
+              {addFriendFeedback.text}
+            </div>
+          )}
 
           <div className="online-list">
             {loadingOnline ? (
@@ -356,6 +469,21 @@ export default function BattleHub({
                     </div>
                   </div>
                   <div className="player-actions">
+                    {friendsList.some((friend) => friend.uid === p.uid) ? (
+                      <span className="already-friend-label">Amigo</span>
+                    ) : (
+                      <button
+                        className="add-online-friend-btn"
+                        onClick={() => handleAddOnlineFriend(p)}
+                        disabled={addingOnlineFriendUid === p.uid}
+                        title="Adicionar como amigo"
+                      >
+                        {addingOnlineFriendUid === p.uid
+                          ? <Loader2 size={16} className="spin-icon" />
+                          : <UserPlus size={16} />}
+                        <span>{addingOnlineFriendUid === p.uid ? 'Adicionando' : 'Adicionar amigo'}</span>
+                      </button>
+                    )}
                     <button
                       className="challenge-btn"
                       onClick={() => handleChallengePlayer(p.uid)}
@@ -637,24 +765,131 @@ export default function BattleHub({
         }
 
         .searching-box {
+          width: 100%;
+          max-width: 390px;
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 10px;
-          padding: 12px;
+          gap: 9px;
+          margin-top: 8px;
+          padding: 20px 18px 16px;
+          border: 1px solid #e9d5ff;
+          border-radius: 22px;
+          background:
+            radial-gradient(circle at 50% 0%, rgba(216, 180, 254, 0.3), transparent 42%),
+            linear-gradient(145deg, #faf5ff, #fff 68%);
+          box-shadow: 0 12px 28px rgba(124, 58, 237, 0.1);
           color: #7c3aed;
-          font-weight: 700;
-          font-size: 0.9rem;
+          text-align: center;
+        }
+
+        .searching-orbit {
+          width: 76px;
+          height: 76px;
+          position: relative;
+          display: grid;
+          place-items: center;
+          margin-bottom: 2px;
+        }
+
+        .searching-orbit-ring {
+          position: absolute;
+          inset: 2px;
+          border: 2px dashed #c4b5fd;
+          border-radius: 50%;
+          animation: searchOrbit 9s linear infinite;
+        }
+
+        .searching-orbit-core {
+          width: 52px;
+          height: 52px;
+          display: grid;
+          place-items: center;
+          border-radius: 17px;
+          background: linear-gradient(145deg, #8b5cf6, #6d28d9);
+          color: white;
+          box-shadow: 0 8px 18px rgba(109, 40, 217, 0.28);
+          animation: searchPulse 1.8s ease-in-out infinite;
+        }
+
+        .searching-orbit-dot {
+          position: absolute;
+          width: 12px;
+          height: 12px;
+          top: 5px;
+          right: 7px;
+          border: 2px solid white;
+          border-radius: 50%;
+          background: #34d399;
+          box-shadow: 0 0 0 4px #d1fae5;
+        }
+
+        @keyframes searchOrbit {
+          to { transform: rotate(360deg); }
+        }
+
+        @keyframes searchPulse {
+          50% { transform: scale(1.06); }
+        }
+
+        .searching-kicker {
+          font-size: 0.64rem;
+          font-weight: 900;
+          letter-spacing: 0.12em;
+          color: #8b5cf6;
+        }
+
+        .searching-box > strong {
+          color: #1e293b;
+          font-size: 1.12rem;
+          font-weight: 900;
+        }
+
+        .searching-description {
+          max-width: 290px;
+          color: #64748b;
+          font-size: 0.82rem;
+          line-height: 1.45;
+        }
+
+        .searching-status {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          margin-top: 3px;
+          padding: 7px 11px;
+          border-radius: 999px;
+          background: #f1f5f9;
+          color: #475569;
+          font-size: 0.72rem;
+          font-weight: 800;
+          text-transform: capitalize;
+        }
+
+        .searching-status-dot {
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+          background: #10b981;
+          box-shadow: 0 0 0 3px #d1fae5;
         }
 
         .cancel-search-btn {
-          background: none;
-          border: 1px solid #cbd5e1;
-          color: #64748b;
-          padding: 6px 14px;
-          border-radius: 10px;
-          font-size: 0.8rem;
+          margin-top: 4px;
+          background: white;
+          border: 1px solid #ddd6fe;
+          color: #6d28d9;
+          padding: 9px 16px;
+          border-radius: 12px;
+          font-size: 0.78rem;
+          font-weight: 800;
           cursor: pointer;
+          transition: background 0.2s ease, transform 0.2s ease;
+        }
+
+        .cancel-search-btn:hover {
+          background: #f5f3ff;
+          transform: translateY(-1px);
         }
 
         /* PANE DE AMIGOS */
@@ -808,6 +1043,36 @@ export default function BattleHub({
           color: white;
         }
 
+        .add-online-friend-btn {
+          background: #dcfce7;
+          color: #15803d;
+          border: 1px solid #86efac;
+          padding: 8px 10px;
+          border-radius: 10px;
+          font-size: 0.8rem;
+          font-weight: 800;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          cursor: pointer;
+        }
+
+        .add-online-friend-btn:hover:not(:disabled) {
+          background: #bbf7d0;
+        }
+
+        .add-online-friend-btn:disabled {
+          opacity: 0.7;
+          cursor: wait;
+        }
+
+        .already-friend-label {
+          color: #15803d;
+          font-size: 0.8rem;
+          font-weight: 800;
+          padding: 8px 10px;
+        }
+
         .remove-btn {
           background: none;
           border: none;
@@ -861,6 +1126,137 @@ export default function BattleHub({
           color: #475569;
           font-weight: 600;
           margin-bottom: 8px;
+        }
+
+        @media (max-width: 600px) {
+          .mode-banner {
+            align-items: flex-start;
+            flex-direction: column;
+          }
+
+          .mode-info,
+          .code-left,
+          .player-info {
+            min-width: 0;
+          }
+
+          .mode-info h2 {
+            font-size: clamp(1.05rem, 5vw, 1.25rem);
+          }
+
+          .mode-info p {
+            line-height: 1.4;
+          }
+
+          .switch-to-solo-btn {
+            max-width: 100%;
+            white-space: normal;
+          }
+
+          .my-code-card {
+            gap: 10px;
+            padding: 12px;
+          }
+
+          .code-display {
+            font-size: clamp(0.95rem, 4.5vw, 1.15rem);
+            overflow-wrap: anywhere;
+          }
+
+          .copy-code-btn {
+            flex: 0 0 auto;
+            padding: 8px 10px;
+          }
+
+          .hub-tabs {
+            gap: 3px;
+            padding: 3px;
+          }
+
+          .hub-tab-btn {
+            min-width: 0;
+            gap: 4px;
+            padding: 9px 4px;
+            font-size: clamp(0.68rem, 2.7vw, 0.82rem);
+          }
+
+          .online-header-info {
+            align-items: flex-start;
+            line-height: 1.4;
+          }
+
+          .player-card {
+            flex-wrap: wrap;
+            gap: 10px;
+            padding: 12px;
+          }
+
+          .player-left {
+            flex: 1 1 100%;
+            min-width: 0;
+          }
+
+          .player-info {
+            flex: 1;
+          }
+
+          .player-name-row strong {
+            min-width: 0;
+            overflow-wrap: anywhere;
+          }
+
+          .player-actions {
+            display: flex;
+            width: 100%;
+            gap: 8px;
+          }
+
+          .player-actions > button,
+          .player-actions > .already-friend-label {
+            min-width: 0;
+            flex: 1 1 0;
+            justify-content: center;
+            padding: 9px 6px;
+            text-align: center;
+            white-space: normal;
+          }
+
+          .player-actions > .remove-btn {
+            flex: 0 0 40px;
+          }
+
+          .add-friend-form {
+            min-width: 0;
+          }
+
+          .friend-input {
+            min-width: 0;
+          }
+        }
+
+        @media (max-width: 380px) {
+          .hub-tab-btn {
+            flex-direction: column;
+            gap: 3px;
+            font-size: 0.68rem;
+          }
+
+          .player-actions {
+            gap: 6px;
+          }
+
+          .player-actions > button,
+          .player-actions > .already-friend-label {
+            font-size: 0.72rem;
+          }
+
+          .add-friend-form {
+            flex-wrap: wrap;
+          }
+
+          .add-friend-form .friend-input {
+            flex-basis: 100%;
+          }
         }
       `}</style>
     </div>

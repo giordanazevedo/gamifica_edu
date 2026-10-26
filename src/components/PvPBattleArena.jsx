@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { submitBattleAnswer } from '../services/pvpService';
-import { Zap, Swords, Trophy, Clock, Heart, Award, ArrowLeft, CheckCircle2, XCircle, RotateCcw } from 'lucide-react';
+import { Zap, Swords, Clock, Heart, Award, ArrowLeft, CheckCircle2, XCircle, RotateCcw } from 'lucide-react';
 import AvatarDisplay from './AvatarDisplay';
 
 export default function PvPBattleArena({
@@ -149,14 +149,294 @@ export default function PvPBattleArena({
   if (battle?.status === 'waiting' || battle?.status === 'waiting_quickmatch') {
     return (
       <div className="arena-waiting-container">
-        <div className="pulsing-swords">
-          <img src="/duelo.png" alt="Duelo" style={{ width: 56, height: 56, objectFit: 'contain' }} />
+        <div className="waiting-battle-card">
+          <div className="waiting-card-glow" />
+          <div className="waiting-card-content">
+            <div className="waiting-emblem">
+              <span className="pulsing-swords">
+                <img src="/duelo.png" alt="" />
+              </span>
+              <span className="waiting-emblem-dot" />
+            </div>
+            <span className="waiting-kicker">
+              {battle.status === 'waiting' ? 'CONVITE ENVIADO' : 'BUSCA EM ANDAMENTO'}
+            </span>
+            <h2>{battle.status === 'waiting' ? 'Desafio lançado!' : 'Aguardando oponente...'}</h2>
+            <p className="waiting-description">
+              {battle.status === 'waiting'
+                ? 'A batalha começa quando o outro jogador aceitar o desafio.'
+                : 'A arena está pronta. Assim que alguém entrar, a batalha começa!'}
+            </p>
+
+            <div className="waiting-player-card">
+              <AvatarDisplay avatar={me?.avatar || '👦🏽'} size="48px" />
+              <div className="waiting-player-info">
+                <span>VOCÊ ESTÁ PRONTO</span>
+                <strong>{me?.name || 'Jogador'}</strong>
+              </div>
+              <span className="waiting-ready-badge">PRONTO</span>
+            </div>
+
+            <div className="waiting-progress" aria-label="Aguardando resposta do oponente">
+              <span className="waiting-progress-step complete"><CheckCircle2 size={16} /> Desafio enviado</span>
+              <span className="waiting-progress-line" />
+              <span className="waiting-progress-step active"><span className="waiting-progress-dot" /> Aguardando resposta</span>
+            </div>
+
+            <span className="waiting-subject">
+              <Swords size={15} />
+              Duelo de {battle.subject?.toUpperCase() || 'GERAL'}
+            </span>
+            <button className="cancel-match-btn" onClick={onExit}>
+              <ArrowLeft size={17} />
+              Cancelar e voltar ao lobby
+            </button>
+          </div>
         </div>
-        <h2>Aguardando Oponente...</h2>
-        <p>A batalha começará assim que o outro jogador se conectar!</p>
-        <button className="cancel-match-btn" onClick={onExit}>
-          Cancelar e Voltar
-        </button>
+        <style>{`
+          .arena-waiting-container {
+            min-height: min(620px, 68vh);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px 12px;
+            text-align: center;
+          }
+
+          .waiting-battle-card {
+            width: 100%;
+            max-width: 460px;
+            position: relative;
+            overflow: hidden;
+            padding: 3px;
+            border-radius: 30px;
+            background: linear-gradient(135deg, #a78bfa, #7c3aed 45%, #fbbf24);
+            box-shadow: 0 24px 55px rgba(76, 29, 149, 0.17);
+            animation: waitingCardEnter 0.45s ease both;
+          }
+
+          .waiting-card-glow {
+            position: absolute;
+            width: 220px;
+            height: 220px;
+            top: -120px;
+            left: calc(50% - 110px);
+            border-radius: 50%;
+            background: rgba(167, 139, 250, 0.35);
+            filter: blur(28px);
+            pointer-events: none;
+          }
+
+          .waiting-card-content {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            padding: clamp(24px, 6vw, 36px) clamp(18px, 5vw, 30px) 26px;
+            border-radius: 27px;
+            background: linear-gradient(160deg, #fff 0%, #fbfaff 62%, #f8f7ff 100%);
+          }
+
+          @keyframes waitingCardEnter {
+            from { opacity: 0; transform: translateY(12px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+          }
+
+          .waiting-emblem {
+            width: 94px;
+            height: 94px;
+            position: relative;
+            display: grid;
+            place-items: center;
+            margin-bottom: 2px;
+            border: 1px solid #ede9fe;
+            border-radius: 28px;
+            background: linear-gradient(145deg, #f5f3ff, #fff7ed);
+          }
+
+          .waiting-emblem .pulsing-swords {
+            width: 68px;
+            height: 68px;
+            display: grid;
+            place-items: center;
+            border-radius: 22px;
+            background: white;
+            box-shadow: 0 8px 20px rgba(124, 58, 237, 0.12);
+            animation: swordsPulse 1.5s infinite alternate;
+          }
+
+          .waiting-emblem .pulsing-swords img {
+            width: 54px;
+            height: 54px;
+            object-fit: contain;
+          }
+
+          .waiting-emblem-dot {
+            position: absolute;
+            right: 3px;
+            bottom: 5px;
+            width: 14px;
+            height: 14px;
+            border: 3px solid white;
+            border-radius: 50%;
+            background: #34d399;
+            box-shadow: 0 0 0 3px #d1fae5;
+          }
+
+          .waiting-kicker {
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: #f3e8ff;
+            color: #7c3aed;
+            font-size: 0.65rem;
+            font-weight: 900;
+            letter-spacing: 0.1em;
+          }
+
+          .waiting-card-content h2 {
+            margin: 0;
+            color: #172033;
+            font-size: clamp(1.45rem, 5vw, 1.8rem);
+            font-weight: 950;
+            letter-spacing: -0.04em;
+          }
+
+          .waiting-description {
+            max-width: 330px;
+            margin: 0;
+            color: #64748b;
+            font-size: 0.92rem;
+            line-height: 1.55;
+          }
+
+          .waiting-player-card {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 8px;
+            padding: 12px;
+            border: 1px solid #e9e5f5;
+            border-radius: 18px;
+            background: white;
+            text-align: left;
+          }
+
+          .waiting-player-info {
+            min-width: 0;
+            display: flex;
+            flex: 1;
+            flex-direction: column;
+            gap: 3px;
+          }
+
+          .waiting-player-info span {
+            color: #94a3b8;
+            font-size: 0.61rem;
+            font-weight: 900;
+            letter-spacing: 0.07em;
+          }
+
+          .waiting-player-info strong {
+            overflow: hidden;
+            color: #1e293b;
+            font-size: 0.9rem;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+
+          .waiting-ready-badge {
+            padding: 6px 8px;
+            border-radius: 9px;
+            background: #dcfce7;
+            color: #15803d;
+            font-size: 0.62rem;
+            font-weight: 900;
+          }
+
+          .waiting-progress {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin: 4px 0;
+            color: #64748b;
+          }
+
+          .waiting-progress-step {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.65rem;
+            font-weight: 800;
+            white-space: nowrap;
+          }
+
+          .waiting-progress-step.complete { color: #059669; }
+          .waiting-progress-step.active { color: #7c3aed; }
+
+          .waiting-progress-line {
+            width: clamp(12px, 5vw, 32px);
+            height: 2px;
+            border-radius: 2px;
+            background: #ddd6fe;
+          }
+
+          .waiting-progress-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #8b5cf6;
+            box-shadow: 0 0 0 4px #ede9fe;
+            animation: waitingDotPulse 1.5s ease-in-out infinite;
+          }
+
+          @keyframes waitingDotPulse {
+            50% { box-shadow: 0 0 0 7px rgba(237, 233, 254, 0.45); }
+          }
+
+          .waiting-subject {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: #64748b;
+            font-size: 0.72rem;
+            font-weight: 800;
+          }
+
+          .cancel-match-btn {
+            width: 100%;
+            min-height: 48px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 4px;
+            padding: 11px 16px;
+            border: 1px solid #ddd6fe;
+            border-radius: 14px;
+            background: white;
+            color: #6d28d9;
+            font-size: 0.84rem;
+            font-weight: 850;
+            cursor: pointer;
+            transition: background 0.2s ease, transform 0.2s ease;
+          }
+
+          .cancel-match-btn:hover {
+            background: #f5f3ff;
+            transform: translateY(-1px);
+          }
+
+          @media (max-width: 400px) {
+            .arena-waiting-container { padding: 14px 4px; }
+            .waiting-card-content { gap: 10px; }
+            .waiting-progress { gap: 6px; }
+            .waiting-progress-step { font-size: 0.58rem; }
+          }
+        `}</style>
       </div>
     );
   }
@@ -405,7 +685,7 @@ export default function PvPBattleArena({
           <div className="trophy-wrapper">
             {isWinner ? (
               <div className="winner-animation">
-                <Trophy size={72} color="#f59e0b" />
+                <img className="winner-trophy-image" src="/trofeu.png" alt="Troféu da vitória" />
                 <div className="confetti-particles">🎉 👑 ⚡ 🏆 ✨</div>
               </div>
             ) : isDraw ? (
@@ -415,7 +695,7 @@ export default function PvPBattleArena({
             )}
           </div>
 
-          <h1 className="result-title">
+          <h1 className={`result-title ${isWinner ? 'winner-title' : ''}`}>
             {isWinner ? 'VITÓRIA ÉPICA!' : isDraw ? 'EMPATE DISPUTADO!' : 'FIM DA BATALHA!'}
           </h1>
           <p className="result-subtitle">
@@ -512,6 +792,13 @@ export default function PvPBattleArena({
             animation: resultTrophyPop 650ms cubic-bezier(.2, .8, .2, 1) both;
           }
 
+          .arena-result-container .winner-trophy-image {
+            width: 80px;
+            height: 80px;
+            object-fit: contain;
+            filter: drop-shadow(0 5px 7px rgba(180, 83, 9, 0.2));
+          }
+
           .arena-result-container .confetti-particles {
             position: absolute;
             top: -10px;
@@ -528,6 +815,15 @@ export default function PvPBattleArena({
             font-weight: 950;
             letter-spacing: -0.04em;
             line-height: 1.1;
+          }
+
+          .arena-result-container .result-title.winner-title {
+            background: linear-gradient(100deg, #f59e0b 8%, #facc15 48%, #ea580c 92%);
+            background-clip: text;
+            color: transparent;
+            filter: drop-shadow(0 3px 0 rgba(217, 119, 6, 0.13));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
           }
 
           .arena-result-container .result-subtitle {
@@ -1338,17 +1634,6 @@ export default function PvPBattleArena({
         @keyframes swordsPulse {
           from { transform: scale(1) rotate(0deg); }
           to { transform: scale(1.15) rotate(10deg); }
-        }
-
-        .cancel-match-btn {
-          margin-top: 16px;
-          padding: 10px 20px;
-          border-radius: 12px;
-          border: 1px solid #cbd5e1;
-          background: white;
-          color: #64748b;
-          font-weight: 700;
-          cursor: pointer;
         }
 
         .vs-preview {

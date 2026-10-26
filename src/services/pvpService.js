@@ -11,11 +11,27 @@ import {
   where,
   onSnapshot,
   serverTimestamp,
+  Timestamp,
   deleteDoc,
   limit
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { getPreparedQuestionPool } from '../data/questionBank';
+
+const PRESENCE_TIMEOUT_MS = 75_000;
+
+function hasActivePresence(data) {
+  if (data.isOnline !== true || !data.lastActive) return false;
+
+  const lastActive = typeof data.lastActive.toMillis === 'function'
+    ? data.lastActive.toMillis()
+    : data.lastActive instanceof Date
+      ? data.lastActive.getTime()
+      : Number.NaN;
+  const presenceAge = Date.now() - lastActive;
+
+  return Number.isFinite(lastActive) && presenceAge >= -15_000 && presenceAge <= PRESENCE_TIMEOUT_MS;
+}
 
 // Gera um código de amigo amigável (ex: LEO-7281)
 export function getOrGenerateFriendCode(profile) {
@@ -41,27 +57,28 @@ export async function updatePresence(uid, isOnline = true, friendCode = null) {
   }
 }
 
-// Busca todos os jogadores online (ativos nos últimos 15 min)
+// Busca jogadores com presença recente no app.
 export async function fetchOnlinePlayers(currentUid) {
   try {
     const q = query(
       collection(db, 'users'),
+      where('lastActive', '>=', Timestamp.fromMillis(Date.now() - PRESENCE_TIMEOUT_MS)),
       limit(25)
     );
     const snap = await getDocs(q);
     const players = [];
     snap.forEach((d) => {
       const data = d.data();
-      if (data.uid !== currentUid) {
+      if (d.id !== currentUid && hasActivePresence(data)) {
         players.push({
-          uid: data.uid,
+          uid: d.id,
           name: data.name || 'Jogador',
           avatar: data.avatar || '👦🏽',
           grade: data.role === 'professor' ? 'Professor' : '9',
           level: data.level || 1,
           xp: data.xp || 0,
           friendCode: data.friendCode || '',
-          isOnline: data.isOnline !== false
+          isOnline: true
         });
       }
     });
@@ -72,8 +89,65 @@ export async function fetchOnlinePlayers(currentUid) {
   }
 }
 
+async function persistFriend(currentUid, friendDoc) {
+  const friendData = friendDoc.data();
+  const friendUid = friendData.uid || friendDoc.id;
+  const currentUserRef = doc(db, 'users', currentUid);
+
+  const result = await runTransaction(db, async (transaction) => {
+    const currentUserSnap = await transaction.get(currentUserRef);
+    if (!currentUserSnap.exists()) {
+      throw new Error('Perfil do usuário não encontrado.');
+    }
+
+    const currentFriends = Array.isArray(currentUserSnap.data().friends)
+      ? currentUserSnap.data().friends
+      : [];
+
+    if (currentFriends.includes(friendUid)) {
+      return { alreadyAdded: true };
+    }
+
+    transaction.update(currentUserRef, { friends: [...currentFriends, friendUid] });
+    return { alreadyAdded: false };
+  });
+
+  if (result.alreadyAdded) {
+    return { success: false, error: `${friendData.name || 'Esse jogador'} já está na sua lista de amigos!` };
+  }
+
+  return {
+    success: true,
+    friend: {
+      uid: friendUid,
+      name: friendData.name || 'Jogador',
+      avatar: friendData.avatar || '👦🏽',
+      level: friendData.level || 1,
+      friendCode: friendData.friendCode || ''
+    }
+  };
+}
+
+export async function addFriendByUid(currentUid, friendUid) {
+  try {
+    if (!friendUid || friendUid === currentUid) {
+      return { success: false, error: 'Você não pode adicionar a si mesmo!' };
+    }
+
+    const friendSnap = await getDoc(doc(db, 'users', friendUid));
+    if (!friendSnap.exists()) {
+      return { success: false, error: 'Jogador não encontrado!' };
+    }
+
+    return await persistFriend(currentUid, friendSnap);
+  } catch (e) {
+    console.error('Erro ao adicionar amigo:', e);
+    return { success: false, error: 'Erro ao conectar. Tente novamente.' };
+  }
+}
+
 // Adiciona um amigo pelo código de amigo ou e-mail
-export async function addFriendByCode(currentUid, currentFriends = [], searchCode) {
+export async function addFriendByCode(currentUid, searchCode) {
   try {
     const clean = searchCode.trim().toUpperCase();
     if (!clean) return { success: false, error: 'Digite um código válido!' };
@@ -92,31 +166,11 @@ export async function addFriendByCode(currentUid, currentFriends = [], searchCod
     }
 
     const friendDoc = snap.docs[0];
-    const friendData = friendDoc.data();
-
-    if (friendData.uid === currentUid) {
+    if ((friendDoc.data().uid || friendDoc.id) === currentUid) {
       return { success: false, error: 'Você não pode adicionar a si mesmo!' };
     }
 
-    if (currentFriends.includes(friendData.uid)) {
-      return { success: false, error: `${friendData.name} já está na sua lista de amigos!` };
-    }
-
-    const updatedFriends = [...currentFriends, friendData.uid];
-    await updateDoc(doc(db, 'users', currentUid), {
-      friends: updatedFriends
-    });
-
-    return {
-      success: true,
-      friend: {
-        uid: friendData.uid,
-        name: friendData.name,
-        avatar: friendData.avatar || '👦🏽',
-        level: friendData.level || 1,
-        friendCode: friendData.friendCode
-      }
-    };
+    return await persistFriend(currentUid, friendDoc);
   } catch (e) {
     console.error('Erro ao adicionar amigo:', e);
     return { success: false, error: 'Erro ao conectar. Tente novamente.' };
@@ -124,11 +178,21 @@ export async function addFriendByCode(currentUid, currentFriends = [], searchCod
 }
 
 // Remove amigo
-export async function removeFriend(currentUid, currentFriends, friendUid) {
+export async function removeFriend(currentUid, friendUid) {
   try {
-    const updated = currentFriends.filter(id => id !== friendUid);
-    await updateDoc(doc(db, 'users', currentUid), {
-      friends: updated
+    const currentUserRef = doc(db, 'users', currentUid);
+    const updated = await runTransaction(db, async (transaction) => {
+      const currentUserSnap = await transaction.get(currentUserRef);
+      if (!currentUserSnap.exists()) {
+        throw new Error('Perfil do usuário não encontrado.');
+      }
+
+      const currentFriends = Array.isArray(currentUserSnap.data().friends)
+        ? currentUserSnap.data().friends
+        : [];
+      const nextFriends = currentFriends.filter((id) => id !== friendUid);
+      transaction.update(currentUserRef, { friends: nextFriends });
+      return nextFriends;
     });
     return { success: true, updatedFriends: updated };
   } catch (e) {
@@ -153,7 +217,7 @@ export async function fetchFriendsDetails(friendUids = []) {
           level: d.level || 1,
           xp: d.xp || 0,
           friendCode: d.friendCode || '',
-          isOnline: d.isOnline !== false
+          isOnline: hasActivePresence(d)
         });
       }
     }
@@ -302,22 +366,39 @@ export async function findOrCreateQuickMatch(currentProfile, subjectId = 'geral'
 
       // Evita entrar na própria sala
       if (roomData.player1.uid !== currentProfile.uid) {
-        await updateDoc(doc(db, 'battles', roomData.id), {
-          status: 'in_progress',
-          gameMode: subjectId === 'matematica' ? 'tug_of_war' : 'classic',
-          player2: {
-            uid: currentProfile.uid,
-            name: currentProfile.name,
-            avatar: currentProfile.avatar || '👦🏽',
-            score: 0,
-            health: 100,
-            currentQuestion: 0,
-            answeredCurrent: false,
-            lastAnswerCorrect: null,
-            ready: true
-          },
-          startedAt: serverTimestamp()
+        const roomRef = doc(db, 'battles', roomData.id);
+        const joined = await runTransaction(db, async (transaction) => {
+          const freshRoom = await transaction.get(roomRef);
+          if (!freshRoom.exists()) return false;
+
+          const freshData = freshRoom.data();
+          if (freshData.status !== 'waiting_quickmatch' || freshData.player1?.uid === currentProfile.uid || freshData.player2) {
+            return false;
+          }
+
+          transaction.update(roomRef, {
+            status: 'in_progress',
+            gameMode: subjectId === 'matematica' ? 'tug_of_war' : 'classic',
+            player2: {
+              uid: currentProfile.uid,
+              name: currentProfile.name,
+              avatar: currentProfile.avatar || '👦🏽',
+              score: 0,
+              health: 100,
+              currentQuestion: 0,
+              answeredCurrent: false,
+              lastAnswerCorrect: null,
+              ready: true
+            },
+            startedAt: serverTimestamp()
+          });
+          return true;
         });
+
+        if (!joined) {
+          return { success: false, error: 'Outro jogador já aceitou essa sala. Tente encontrar outra batalha.' };
+        }
+
         return { success: true, battleId: roomData.id, isHost: false };
       }
     }
@@ -403,7 +484,13 @@ export async function submitBattleAnswer({
           return;
         }
 
-        const newScore = (currentP.score || 0) + (isCorrect ? pointsEarned : 0);
+        console.log('submitBattleAnswer (tug_of_war) called', { battleId, isPlayer1, questionIdx, isCorrect, pointsEarned });
+        // Garantir que o valor seja numérico (NaN → 0)
+        const pts = Number(pointsEarned);
+        const safePts = Number.isNaN(pts) ? 0 : pts;
+        const newScore = (currentP.score || 0) + (isCorrect ? safePts : 0);
+        // Debug: pontos calculados
+        console.log('Calculado pts:', safePts, 'newScore:', newScore);
         const updates = {
           [`${pKey}.score`]: newScore,
           [`${pKey}.answeredCurrent`]: true,
@@ -411,6 +498,7 @@ export async function submitBattleAnswer({
         };
 
         if (!currentOpp?.answeredCurrent) {
+          console.log('Tug final update:', updates);
           transaction.update(battleRef, updates);
           return;
         }
@@ -451,7 +539,11 @@ export async function submitBattleAnswer({
         return;
       }
 
-      const newScore = (currentP.score || 0) + (isCorrect ? pointsEarned : 0);
+      console.log('submitBattleAnswer (classic) called', { battleId, isPlayer1, questionIdx, isCorrect, pointsEarned });
+// Garantir que o valor seja numérico (NaN → 0)
+      const pts = Number(pointsEarned);
+      const safePts = Number.isNaN(pts) ? 0 : pts;
+      const newScore = (currentP.score || 0) + (isCorrect ? safePts : 0);
       const newOppHealth = isCorrect
         ? Math.max(0, (currentOpp?.health || 100) - 20)
         : (currentOpp?.health || 100);
@@ -475,7 +567,8 @@ export async function submitBattleAnswer({
         else updates.winner = 'draw';
       }
 
-      transaction.update(battleRef, updates);
+      console.log('Classic update:', updates);
+    transaction.update(battleRef, updates);
     });
   } catch (e) {
     console.error('Erro ao submeter resposta:', e);

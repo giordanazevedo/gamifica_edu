@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Flame, Star, ChevronLeft, Home, Map as MapIcon, Trophy, User, Swords } from 'lucide-react';
 import { useAuth } from './hooks/useAuth';
 import Onboarding from './components/Onboarding';
@@ -12,6 +12,7 @@ import BattleHub from './components/BattleHub';
 import PvPBattleArena from './components/PvPBattleArena';
 import BattleInviteModal from './components/BattleInviteModal';
 import AvatarDisplay from './components/AvatarDisplay';
+import MultiplicationChallenge from './components/MultiplicationChallenge';
 import { updatePresence, getOrGenerateFriendCode } from './services/pvpService';
 
 function App() {
@@ -27,6 +28,7 @@ function App() {
     updateAccountProfile,
     completeFirstVisitSetup,
     saveProgress,
+    addQuizReward,
     addBattleReward,
     fetchRanking,
   } = useAuth();
@@ -34,6 +36,7 @@ function App() {
   const [currentScreen, setCurrentScreen] = useState('dashboard');
   const [selectedSubject, setSelectedSubject] = useState(null);
   const [selectedTopic, setSelectedTopic] = useState(null);
+  const [selectedDifficulty, setSelectedDifficulty] = useState('misturado');
   const [showShop, setShowShop] = useState(false);
   const [activeMapSubject, setActiveMapSubject] = useState(null);
   const [activeBattleId, setActiveBattleId] = useState(null);
@@ -46,6 +49,12 @@ function App() {
   const [avatar, setAvatar] = useState('👦🏽');
   const [unlockedAvatars, setUnlockedAvatars] = useState(['👦🏽']);
   const [streak, setStreak] = useState(1);
+  const presenceName = profile?.name || 'Jogador';
+  const storedFriendCode = profile?.friendCode;
+  const presenceFriendCode = useMemo(
+    () => getOrGenerateFriendCode({ name: presenceName, friendCode: storedFriendCode }),
+    [presenceName, storedFriendCode]
+  );
 
   // Sincroniza estado local quando o perfil do Firebase carrega
   useEffect(() => {
@@ -61,23 +70,36 @@ function App() {
 
   // Atualiza presença online e código de amigo
   useEffect(() => {
-    if (user?.uid && profile) {
-      const code = getOrGenerateFriendCode(profile);
-      updatePresence(user.uid, true, code);
+    if (user?.uid && presenceFriendCode) {
+      const refreshPresence = () => {
+        updatePresence(user.uid, document.visibilityState === 'visible', presenceFriendCode);
+      };
+      refreshPresence();
       const interval = setInterval(() => {
-        updatePresence(user.uid, true);
-      }, 60000);
+        if (document.visibilityState === 'visible') {
+          updatePresence(user.uid, true);
+        }
+      }, 30000);
+      document.addEventListener('visibilitychange', refreshPresence);
       return () => {
         clearInterval(interval);
+        document.removeEventListener('visibilitychange', refreshPresence);
         updatePresence(user.uid, false);
       };
     }
-  }, [user?.uid, profile]);
+  }, [user?.uid, presenceFriendCode]);
 
   // Salva no Firebase toda vez que XP/medals/topics mudam
   const persistProgress = useCallback((updates) => {
     saveProgress(updates);
   }, [saveProgress]);
+
+  const handleMinigameWin = (earnedXp) => {
+    const newXp = xp + earnedXp;
+    setXp(newXp);
+    setLives(prev => Math.min(3, prev + 1));
+    persistProgress({ xp: newXp, medals, completedTopics, avatar, unlockedAvatars, streak });
+  };
 
   // Regeneração de vidas
   useEffect(() => {
@@ -116,54 +138,43 @@ function App() {
     setCurrentScreen(screen);
   };
 
-  const handleTopicSelect = (subject, topic) => {
+  const handleTopicSelect = (subject, topic, difficulty) => {
     if (lives <= 0) {
       alert('Você está sem vidas! Espere um pouco para regenerá-las.');
       return;
     }
     setSelectedSubject(subject);
     setSelectedTopic(topic);
+    setSelectedDifficulty(difficulty);
     setCurrentScreen('quiz');
   };
 
-  const handleMinigameWin = (earnedXp) => {
-    const newXp = xp + earnedXp;
-    setXp(newXp);
-    setLives(prev => Math.min(3, prev + 1));
-    persistProgress({ xp: newXp, medals, completedTopics, avatar, unlockedAvatars, streak });
-  };
-
-  const handleQuizComplete = (earnedXp, isFailure) => {
-    let newXp = xp;
-    let newCompletedTopics = [...completedTopics];
-    let newMedals = [...medals];
-
-    if (isFailure) {
-      setLives(prev => Math.max(0, prev - 1));
-    } else {
-      const topicKey = `${selectedSubject.id}_${profile?.grade}_${selectedTopic.id}`;
-      if (!newCompletedTopics.includes(topicKey)) {
-        newCompletedTopics.push(topicKey);
+  const handleQuizComplete = async (earnedXp, isFailure) => {
+    const topicKey = `${selectedSubject.id}_${profile?.grade}_${selectedTopic.id}`;
+    const medal = earnedXp > 0
+      ? {
+        id: topicKey,
+        icon: selectedSubject.icon,
+        name: `Mestre em ${selectedTopic.title}`,
       }
-    }
+      : null;
 
-    if (earnedXp > 0) {
-      newXp += earnedXp;
-      const medalId = `${selectedSubject.id}_${profile?.grade}_${selectedTopic.id}`;
-      if (!newMedals.find(m => m.id === medalId)) {
-        newMedals.push({
-          id: medalId,
-          icon: selectedSubject.icon,
-          name: `Mestre em ${selectedTopic.title}`
-        });
-      }
+    try {
+      const updatedProfile = await addQuizReward({
+        earnedXp,
+        completedTopicKey: isFailure ? null : topicKey,
+        medal,
+      });
+      setXp(updatedProfile.xp);
+      setCompletedTopics(updatedProfile.completedTopics);
+      setMedals(updatedProfile.medals);
+      if (isFailure) setLives(prev => Math.max(0, prev - 1));
+      setCurrentScreen('map');
+      return { success: true };
+    } catch (error) {
+      console.error('Não foi possível salvar o resultado do quiz:', error);
+      throw error;
     }
-
-    setXp(newXp);
-    setCompletedTopics(newCompletedTopics);
-    setMedals(newMedals);
-    persistProgress({ xp: newXp, medals: newMedals, completedTopics: newCompletedTopics, avatar, unlockedAvatars, streak });
-    setCurrentScreen('map');
   };
 
   const handleBuyAvatar = (id, cost) => {
@@ -184,10 +195,86 @@ function App() {
   if (loading) {
     return (
       <div className="mobile-app-container">
-        <div className="loading-screen">
-          <img src="/logo.png" alt="GamificaEdu" style={{ maxWidth: '160px', marginBottom: '24px' }} />
-          <div className="loading-spinner"></div>
-          <p>Carregando...</p>
+        <style>{`
+          .mobile-app-container {
+            min-height: 100vh;
+            min-height: 100dvh;
+            display: flex;
+            justify-content: center;
+            background: #fff7f2;
+          }
+
+          .loading-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            min-height: 100vh;
+            min-height: 100dvh;
+            padding: 32px 24px;
+            gap: 12px;
+            color: #1e293b;
+            background: radial-gradient(ellipse at 50% 35%, #ffffff 0%, #fffaf5 60%, #fff1f2 100%);
+            text-align: center;
+          }
+
+          .loading-logo {
+            display: block;
+            width: min(78vw, 300px);
+            height: auto;
+            max-height: 180px;
+            object-fit: contain;
+            margin-bottom: 14px;
+            animation: loading-logo-arrive 700ms ease-out both;
+          }
+
+          .loading-title {
+            font-size: clamp(1.05rem, 4vw, 1.3rem);
+            font-weight: 800;
+            letter-spacing: -0.025em;
+          }
+
+          .loading-caption {
+            color: #64748b;
+            font-size: 0.9rem;
+            font-weight: 500;
+          }
+
+          .loading-dots {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            height: 18px;
+            margin-top: 4px;
+          }
+
+          .loading-dots i {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #dc2626;
+            animation: loading-pulse 900ms ease-in-out infinite alternate;
+          }
+
+          .loading-dots i:nth-child(2) { animation-delay: 180ms; }
+          .loading-dots i:nth-child(3) { animation-delay: 360ms; }
+
+          @keyframes loading-pulse {
+            from { opacity: 0.35; transform: translateY(0); }
+            to { opacity: 1; transform: translateY(-4px); }
+          }
+
+          @keyframes loading-logo-arrive {
+            from { opacity: 0; transform: translateY(8px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+          }
+        `}</style>
+        <div className="loading-screen" role="status" aria-live="polite">
+          <img src="/logo.png" alt="GamificaEdu" className="loading-logo" />
+          <p className="loading-title">Seu aprendizado, uma nova aventura.</p>
+          <span className="loading-caption">Preparando sua jornada</span>
+          <div className="loading-dots" aria-hidden="true"><i /><i /><i /></div>
         </div>
       </div>
     );
@@ -262,22 +349,26 @@ function App() {
         <main className="mobile-main">
           {currentScreen === 'dashboard' && (
             <Dashboard
-              user={profile}
               xp={xp}
               streak={streak}
-              medals={medals}
               completedTopics={completedTopics}
               onNavigate={handleNavigate}
-              onMinigameWin={handleMinigameWin}
+            />
+          )}
+          {currentScreen === 'multiplication' && (
+            <MultiplicationChallenge
+              onComplete={(earnedXp) => {
+                if (earnedXp > 0) handleMinigameWin(earnedXp);
+                setCurrentScreen('dashboard');
+              }}
+              onExit={() => setCurrentScreen('dashboard')}
             />
           )}
           {currentScreen === 'map' && (
             <MainMap
               userGrade={profile.grade}
-              currentProfile={profile}
               completedTopics={completedTopics}
               onSelectTopic={handleTopicSelect}
-              onMinigameWin={handleMinigameWin}
               initialSubjectId={activeMapSubject}
             />
           )}
@@ -286,6 +377,7 @@ function App() {
               subject={selectedSubject}
               grade={profile.grade}
               topic={selectedTopic}
+              initialDifficulty={selectedDifficulty}
               onComplete={handleQuizComplete}
               onExit={() => setCurrentScreen('map')}
             />
@@ -330,7 +422,7 @@ function App() {
         <button className={`nav-item ${currentScreen === 'map' ? 'active' : ''}`} onClick={() => setCurrentScreen('map')} title="Mapa">
           <MapIcon size={24} />
         </button>
-        <button className={`nav-item ${currentScreen === 'battle' || currentScreen === 'pvp_arena' ? 'active' : ''}`} onClick={() => setCurrentScreen('battle')} title="Batalha PvP">
+        <button className={`nav-item ${currentScreen === 'battle' || currentScreen === 'pvp_arena' ? 'active' : ''}`} onClick={() => setCurrentScreen('battle')} title="Duelo 1x1">
           <Swords size={24} />
         </button>
         <button className={`nav-item ${currentScreen === 'ranking' ? 'active' : ''}`} onClick={() => setCurrentScreen('ranking')} title="Ranking">
@@ -365,6 +457,8 @@ function App() {
         .mobile-app-container {
           background-color: #1a162b;
           min-height: 100vh;
+          min-height: 100svh;
+          min-height: 100dvh;
           display: flex;
           justify-content: center;
           font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -375,19 +469,68 @@ function App() {
           flex-direction: column;
           align-items: center;
           justify-content: center;
+          width: 100%;
           min-height: 100vh;
-          gap: 16px;
-          color: white;
-          font-weight: 700;
+          min-height: 100dvh;
+          padding: 32px 24px;
+          gap: 12px;
+          color: #1e293b;
+          background: radial-gradient(ellipse at 50% 35%, #ffffff 0%, #fffaf5 60%, #fff1f2 100%);
+          text-align: center;
         }
 
-        .loading-spinner {
-          width: 40px;
-          height: 40px;
-          border: 4px solid rgba(255,255,255,0.15);
-          border-top-color: #9D74FF;
+        .loading-logo {
+          width: min(78vw, 300px);
+          max-height: 180px;
+          object-fit: contain;
+          margin-bottom: 14px;
+          animation: logo-arrive 700ms ease-out both;
+        }
+
+        .loading-title {
+          font-size: clamp(1.05rem, 4vw, 1.3rem);
+          font-weight: 800;
+          letter-spacing: -0.025em;
+        }
+
+        .loading-caption {
+          color: #64748b;
+          font-size: 0.9rem;
+          font-weight: 500;
+        }
+
+        .loading-dots {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          height: 18px;
+          margin-top: 4px;
+        }
+
+        .loading-dots i {
+          width: 7px;
+          height: 7px;
           border-radius: 50%;
-          animation: spin 0.8s linear infinite;
+          background: #dc2626;
+          animation: loading-pulse 900ms ease-in-out infinite alternate;
+        }
+
+        .loading-dots i:nth-child(2) {
+          animation-delay: 180ms;
+        }
+
+        .loading-dots i:nth-child(3) {
+          animation-delay: 360ms;
+        }
+
+        @keyframes loading-pulse {
+          from { opacity: 0.35; transform: translateY(0); }
+          to { opacity: 1; transform: translateY(-4px); }
+        }
+
+        @keyframes logo-arrive {
+          from { opacity: 0; transform: translateY(8px) scale(0.98); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
         }
 
         @keyframes spin {
@@ -527,20 +670,30 @@ function App() {
         @media (max-width: 600px) {
           .mobile-app-container {
             min-height: 100vh;
+            min-height: 100svh;
             min-height: 100dvh;
             align-items: stretch;
           }
 
           .mobile-app-content {
+            display: flex;
+            flex-direction: column;
             width: 100%;
             max-width: none;
             min-height: 100vh;
+            min-height: 100svh;
             min-height: 100dvh;
             margin: 0;
-            padding: 14px 12px calc(94px + env(safe-area-inset-bottom));
+            padding: calc(14px + env(safe-area-inset-top)) clamp(12px, 4vw, 20px) calc(88px + env(safe-area-inset-bottom));
             border-radius: 0;
             box-shadow: none;
-            overflow-x: clip;
+            overflow: visible;
+          }
+
+          .mobile-main {
+            width: 100%;
+            min-width: 0;
+            flex: 1;
           }
 
           .mobile-header {
@@ -571,12 +724,20 @@ function App() {
           .bottom-nav {
             width: 100%;
             max-width: none;
-            padding: 9px 0 calc(12px + env(safe-area-inset-bottom));
+            padding: 9px 0 calc(10px + env(safe-area-inset-bottom));
             border-radius: 16px 16px 0 0;
           }
 
           .nav-item {
             padding: 8px 10px;
+          }
+
+          .dashboard-view,
+          .battle-hub-view,
+          .ranking-view,
+          .dashboard-wrapper {
+            min-width: 0;
+            width: 100%;
           }
         }
 

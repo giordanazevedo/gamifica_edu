@@ -153,8 +153,10 @@ export default function FirstVisitSetup({ profile, onComplete }) {
         .first-visit-page {
           display: grid;
           min-height: 100vh;
+          min-height: 100svh;
+          min-height: 100dvh;
           place-items: center;
-          padding: 22px 14px;
+          padding: calc(22px + env(safe-area-inset-top)) 14px calc(22px + env(safe-area-inset-bottom));
           background: linear-gradient(145deg, #eef2ff, #f8fafc 55%, #f5f3ff);
           font-family: inherit;
         }

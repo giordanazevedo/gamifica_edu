@@ -393,6 +393,45 @@ export default function Ranking({ fetchRanking, currentUid, onBack }) {
         .spin {
           animation: spin 1s linear infinite;
         }
+
+        @media (max-width: 420px) {
+          .ranking-title-row {
+            gap: 8px;
+          }
+
+          .ranking-title-row h2 {
+            min-width: 0;
+            font-size: 1.2rem;
+          }
+
+          .rank-item {
+            gap: 7px;
+            padding: 10px 8px;
+          }
+
+          .rank-info {
+            min-width: 0;
+          }
+
+          .rank-player-name,
+          .rank-meta {
+            overflow-wrap: anywhere;
+          }
+
+          .rank-player-name {
+            font-size: 0.84rem;
+          }
+
+          .rank-meta {
+            font-size: 0.67rem;
+          }
+
+          .rank-score {
+            gap: 2px;
+            font-size: 0.78rem;
+          }
+        }
+
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }

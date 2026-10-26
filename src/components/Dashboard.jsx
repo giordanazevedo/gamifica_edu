@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
 import { Star, Flame, Shield, Calculator, BookOpen, FlaskConical, Landmark, Globe, MessageCircle, Palette, Activity, Heart, Zap, ArrowRight, Sparkles } from 'lucide-react';
-import StopGame from './StopGame';
 import AIStudyQuiz from './AIStudyQuiz';
 
-export default function Dashboard({ user, onNavigate, xp = 0, streak = 1, medals = [], completedTopics = [], onMinigameWin }) {
-  const [showStop, setShowStop] = useState(false);
+export default function Dashboard({ onNavigate, xp = 0, streak = 1, completedTopics = [] }) {
   const [showAIQuiz, setShowAIQuiz] = useState(false);
 
   const level = Math.floor(xp / 1000) + 1;
@@ -14,9 +12,8 @@ export default function Dashboard({ user, onNavigate, xp = 0, streak = 1, medals
   const completedToday = Math.min(completedTopics?.length || 0, dailyGoal);
   const progressPercent = (completedToday / dailyGoal) * 100;
 
-  const handleStopComplete = (score) => {
-    if (score > 0 && onMinigameWin) onMinigameWin(score);
-    setShowStop(false);
+  const openMultiplicationChallenge = () => {
+    if (onNavigate) onNavigate('multiplication');
   };
 
   return (
@@ -64,13 +61,13 @@ export default function Dashboard({ user, onNavigate, xp = 0, streak = 1, medals
             <span className="mode-action-link">Entrar no Mapa ›</span>
           </div>
 
-          {/* Modo Batalha PvP */}
+          {/* Modo Duelo 1x1 */}
           <div className="mode-selection-card pvp-card" onClick={() => onNavigate && onNavigate('battle')}>
             <div className="mode-badge pvp-badge">⚡ AO VIVO</div>
             <div className="mode-icon-circle pvp-circle">⚔️</div>
-            <h4>Batalha Online</h4>
-            <p>Duele em tempo real contra amigos ou oponentes conectados!</p>
-            <span className="mode-action-link pvp-link">Buscar Duelo 1v1 ›</span>
+            <h4>Duelo 1x1</h4>
+            <p>Desafie amigos ou encontre outro jogador para uma partida em tempo real!</p>
+            <span className="mode-action-link pvp-link">Encontrar oponente ›</span>
           </div>
         </div>
       </div>
@@ -145,51 +142,24 @@ export default function Dashboard({ user, onNavigate, xp = 0, streak = 1, medals
       </div>
 
       {/* Active Challenge */}
-      <div className="active-challenge-card" onClick={() => onNavigate && onNavigate('map')}>
+      <div
+        className="active-challenge-card"
+        role="button"
+        tabIndex={0}
+        onClick={openMultiplicationChallenge}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            openMultiplicationChallenge();
+          }
+        }}
+      >
         <div className="challenge-info">
           <span className="challenge-label">DESAFIO ATIVO</span>
           <h3><Zap size={20} color="#fcd34d" /> Multiplicação Rápida</h3>
         </div>
         <button className="play-challenge-btn">Jogar <ArrowRight size={20} /></button>
       </div>
-
-      {/* Minigames Arcade Section */}
-      <div className="arcade-section" style={{ marginTop: '16px', marginBottom: '16px' }}>
-        <div className="section-header">
-          <h3>🎮 Fliperama Educativo</h3>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
-          <div
-            onClick={() => setShowStop(true)}
-            style={{
-              background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
-              border: '2px solid #fca5a5',
-              borderRadius: '18px',
-              padding: '14px',
-              cursor: 'pointer',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '4px'
-            }}
-          >
-            <span style={{ fontSize: '1.8rem' }}>🛑</span>
-            <strong style={{ fontSize: '0.95rem', color: '#991b1b' }}>Stop / Adedonha</strong>
-            <p style={{ fontSize: '0.72rem', color: '#b91c1c', margin: 0, lineHeight: 1.3 }}>Sorteie a letra e desafie seus conhecimentos!</p>
-          </div>
-
-        </div>
-      </div>
-
-      {/* Modals for Minigames */}
-      {showStop && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(6px)', zIndex: 1000, overflowY: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-          <StopGame 
-            profile={user}
-            onExit={() => setShowStop(false)}
-            onComplete={handleStopComplete}
-          />
-        </div>
-      )}
 
       {showAIQuiz && <AIStudyQuiz onClose={() => setShowAIQuiz(false)} />}
 
@@ -546,6 +516,62 @@ export default function Dashboard({ user, onNavigate, xp = 0, streak = 1, medals
           display: flex;
           align-items: center;
           gap: 4px;
+        }
+
+        @media (max-width: 420px) {
+          .stats-container {
+            gap: 4px;
+            padding: 12px 6px;
+          }
+
+          .stat-value {
+            gap: 3px;
+            font-size: clamp(0.78rem, 3.7vw, 1rem);
+          }
+
+          .stat-value svg {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+          }
+
+          .stat-label {
+            font-size: 0.66rem;
+            text-align: center;
+          }
+
+          .game-modes-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+          }
+
+          .mode-selection-card {
+            min-width: 0;
+            padding: 12px 10px;
+          }
+
+          .mode-selection-card h4 {
+            font-size: 0.88rem;
+          }
+
+          .progress-header {
+            align-items: flex-start;
+            gap: 8px;
+          }
+
+          .progress-header h3,
+          .progress-text {
+            font-size: 0.82rem;
+          }
+
+          .active-challenge-card {
+            gap: 10px;
+            padding: 16px 12px;
+          }
+
+          .challenge-info h3 {
+            font-size: 0.95rem;
+          }
         }
       `}</style>
     </div>

@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
-import { BookOpen, Calculator, FlaskConical, Landmark, Globe, MessageCircle, Palette, Activity, Heart, Trophy, X, Plus, OctagonAlert, Zap, Gamepad2, UserCircle2 } from 'lucide-react';
+import { BookOpen, Calculator, FlaskConical, Landmark, Globe, MessageCircle, Palette, Activity, Heart, Trophy, Gamepad2 } from 'lucide-react';
 import { curriculum } from '../data/curriculum';
-import JumperGame from './JumperGame';
-import StopGame from './StopGame';
 
 const allSubjects = [
   { id: 'portugues', name: 'Português', icon: <BookOpen size={18} />, color: '#9D74FF' },
@@ -16,7 +14,7 @@ const allSubjects = [
   { id: 'religiao', name: 'Ensino Relig.', icon: <Heart size={18} />, color: '#8B5CF6' },
 ];
 
-export default function MainMap({ userGrade, currentProfile, completedTopics, onSelectTopic, onMinigameWin, initialSubjectId }) {
+export default function MainMap({ userGrade, completedTopics, onSelectTopic, initialSubjectId }) {
   const [activeSubjectId, setActiveSubjectId] = useState(initialSubjectId || allSubjects[0].id);
 
   React.useEffect(() => {
@@ -24,32 +22,20 @@ export default function MainMap({ userGrade, currentProfile, completedTopics, on
       setActiveSubjectId(initialSubjectId);
     }
   }, [initialSubjectId]);
-  const [showRanking, setShowRanking] = useState(false);
-  const [showJumper, setShowJumper] = useState(false);
-  const [showStop, setShowStop] = useState(false);
-  
-  // Friend System Mock
-  const [friends, setFriends] = useState([
-    { name: 'Mari', score: 3200, avatar: '👧' },
-    { name: 'Lucas', score: 1500, avatar: '👦' },
-    { name: 'João', score: 800, avatar: '🧑' }
-  ]);
-  const [newFriendName, setNewFriendName] = useState('');
+  const [topicToStart, setTopicToStart] = useState(null);
+  const [selectedDifficulty, setSelectedDifficulty] = useState(null);
+  const difficulties = [
+    { id: 'fácil', title: 'Fácil', description: 'Para começar e revisar', icon: '🌱' },
+    { id: 'médio', title: 'Médio', description: 'Um desafio equilibrado', icon: '⚡' },
+    { id: 'difícil', title: 'Difícil', description: 'Para testar seus limites', icon: '🔥' },
+    { id: 'misturado', title: 'Misturado', description: 'Questões de todos os níveis', icon: '🎲' },
+  ];
 
-  const handleAddFriend = (e) => {
-    e.preventDefault();
-    if (newFriendName.trim()) {
-      const avatars = ['👦', '👧', '🧑', '👩', '👨'];
-      const randomAvatar = avatars[Math.floor(Math.random() * avatars.length)];
-      const randomScore = Math.floor(Math.random() * 3000);
-      setFriends([...friends, { name: newFriendName, score: randomScore, avatar: randomAvatar }]);
-      setNewFriendName('');
-    }
-  };
-
-  const getRanking = () => {
-    const all = [...friends, { name: 'Você', score: 2800, avatar: '😎', isMe: true }];
-    return all.sort((a, b) => b.score - a.score);
+  const startSelectedTopic = () => {
+    if (!topicToStart || !selectedDifficulty) return;
+    onSelectTopic(activeSubject, topicToStart, selectedDifficulty);
+    setTopicToStart(null);
+    setSelectedDifficulty(null);
   };
   
   const activeSubject = allSubjects.find(s => s.id === activeSubjectId);
@@ -58,51 +44,6 @@ export default function MainMap({ userGrade, currentProfile, completedTopics, on
 
   return (
     <div className="dashboard-wrapper">
-      {/* Botão de Ranking Flutuante */}
-      <button className="ranking-fab" onClick={() => setShowRanking(true)}>
-        <Trophy size={18} /> Ranking
-      </button>
-
-      {/* Modal de Ranking */}
-      {showRanking && (
-        <div className="ranking-modal glass-card" style={{ maxWidth: '450px' }}>
-          <div className="ranking-header">
-            <h3>Competição (Amigos)</h3>
-            <button onClick={() => setShowRanking(false)}><X size={20} /></button>
-          </div>
-          
-          <form onSubmit={handleAddFriend} style={{ display: 'flex', gap: '10px', marginBottom: '1.5rem' }}>
-            <input 
-              type="text" 
-              value={newFriendName}
-              onChange={(e) => setNewFriendName(e.target.value)}
-              placeholder="Adicionar amigo..."
-              style={{ flex: 1, padding: '10px', borderRadius: 'var(--radius-md)', border: '2px solid var(--border-light)', outline: 'none' }}
-            />
-            <button type="submit" className="btn btn-primary" style={{ padding: '10px 15px', display: 'flex', alignItems: 'center' }}><Plus size={20} /></button>
-          </form>
-
-          <div className="ranking-list" style={{ maxHeight: '300px', overflowY: 'auto' }}>
-            {getRanking().map((player, index) => {
-              let medal = `${index + 1}º`;
-              let itemClass = '';
-              if (index === 0) { medal = '🥇'; itemClass = 'first'; }
-              else if (index === 1) { medal = '🥈'; itemClass = 'second'; }
-              else if (index === 2) { medal = '🥉'; itemClass = 'third'; }
-              
-              return (
-                <div key={index} className={`ranking-item ${itemClass}`} style={player.isMe ? { border: '2px solid var(--primary)' } : {}}>
-                  <span style={{ width: '30px', textAlign: 'center' }}>{medal}</span> 
-                  <span className="avatar"><UserCircle2 size={24} color="var(--primary)" /></span> 
-                  <span>{player.name}</span> 
-                  <span className="score">{player.score} XP</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Barra de Matérias */}
       <div className="subjects-nav glass">
         {allSubjects.map(subject => (
@@ -123,26 +64,6 @@ export default function MainMap({ userGrade, currentProfile, completedTopics, on
         <p style={{ color: 'var(--text-muted)' }}>Escolha qualquer conteúdo do {userGrade}º Ano para estudar</p>
       </div>
 
-      {/* Banners de Minigames */}
-      <div className="minigames-container" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-        <div className="fliperama-banner glass-card" onClick={() => setShowStop(true)} style={{ marginBottom: 0, padding: '1rem', borderColor: activeSubject.color }}>
-          <div className="fliperama-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><OctagonAlert size={32} color={activeSubject.color} /></div>
-          <div className="fliperama-info">
-            <h3 style={{ fontSize: '1.2rem', color: activeSubject.color }}>Stop</h3>
-            <p style={{ fontSize: '0.85rem' }}>Letras e Categorias!</p>
-          </div>
-        </div>
-
-        <div className="fliperama-banner glass-card" onClick={() => setShowJumper(true)} style={{ marginBottom: 0, padding: '1rem', borderColor: activeSubject.color }}>
-          <div className="fliperama-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Zap size={32} color={activeSubject.color} /></div>
-          <div className="fliperama-info">
-            <h3 style={{ fontSize: '1.2rem', color: activeSubject.color }}>Corrida XP</h3>
-            <p style={{ fontSize: '0.85rem' }}>Farme muito XP!</p>
-          </div>
-        </div>
-
-      </div>
-
       {/* Grid Livre de Conteúdos */}
       {topics.length > 0 ? (
         <div className="topics-grid">
@@ -154,7 +75,10 @@ export default function MainMap({ userGrade, currentProfile, completedTopics, on
               <div 
                 key={topic.id} 
                 className={`topic-card glass-card ${isCompleted ? 'completed' : ''}`}
-                onClick={() => onSelectTopic(activeSubject, topic)}
+                onClick={() => {
+                  setTopicToStart(topic);
+                  setSelectedDifficulty(null);
+                }}
                 style={{ '--node-color': activeSubject.color }}
               >
                 <div className="topic-icon-wrapper" style={{ background: isCompleted ? 'var(--success)' : activeSubject.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -189,26 +113,80 @@ export default function MainMap({ userGrade, currentProfile, completedTopics, on
         </div>
       )}
 
-      {showJumper && (
-        <JumperGame 
-          onClose={() => setShowJumper(false)} 
-          onWin={(xp) => {
-            onMinigameWin(xp);
-            setShowJumper(false);
-          }} 
-        />
-      )}
+      {topicToStart && (
+        <div
+          className="difficulty-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setTopicToStart(null);
+              setSelectedDifficulty(null);
+            }
+          }}
+        >
+          <section
+            className="difficulty-modal glass-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="difficulty-modal-title"
+          >
+            <button
+              className="difficulty-modal-close"
+              type="button"
+              onClick={() => {
+                setTopicToStart(null);
+                setSelectedDifficulty(null);
+              }}
+              aria-label="Fechar escolha de dificuldade"
+            >
+              ×
+            </button>
+            <span className="difficulty-modal-icon" aria-hidden="true">🎯</span>
+            <p className="difficulty-modal-eyebrow">PREPARE-SE PARA O DESAFIO</p>
+            <h2 id="difficulty-modal-title">Escolha a dificuldade</h2>
+            <p className="difficulty-modal-topic">{topicToStart.title}</p>
 
-      {showStop && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(6px)', zIndex: 1000, overflowY: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-          <StopGame 
-            profile={currentProfile}
-            onExit={() => setShowStop(false)}
-            onComplete={(xp) => {
-              onMinigameWin(xp);
-              setShowStop(false);
-            }}
-          />
+            <div className="difficulty-options" role="group" aria-label="Nível de dificuldade">
+              {difficulties.map((difficulty) => (
+                <button
+                  key={difficulty.id}
+                  className={`difficulty-option ${selectedDifficulty === difficulty.id ? 'selected' : ''}`}
+                  type="button"
+                  aria-pressed={selectedDifficulty === difficulty.id}
+                  onClick={() => setSelectedDifficulty(difficulty.id)}
+                >
+                  <span className="difficulty-option-icon" aria-hidden="true">{difficulty.icon}</span>
+                  <span className="difficulty-option-copy">
+                    <strong>{difficulty.title}</strong>
+                    <small>{difficulty.description}</small>
+                  </span>
+                  <span className="difficulty-option-check" aria-hidden="true">
+                    {selectedDifficulty === difficulty.id ? '✓' : ''}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div className="difficulty-modal-actions">
+              <button
+                className="difficulty-cancel"
+                type="button"
+                onClick={() => {
+                  setTopicToStart(null);
+                  setSelectedDifficulty(null);
+                }}
+              >
+                Voltar
+              </button>
+              <button
+                className="difficulty-start"
+                type="button"
+                onClick={startSelectedTopic}
+                disabled={!selectedDifficulty}
+              >
+                Começar estudo
+              </button>
+            </div>
+          </section>
         </div>
       )}
 
@@ -218,74 +196,6 @@ export default function MainMap({ userGrade, currentProfile, completedTopics, on
           margin: 0 auto;
           position: relative;
         }
-
-        .ranking-fab {
-          position: fixed;
-          bottom: 2rem;
-          right: 2rem;
-          background: linear-gradient(135deg, #F59E0B, #EA580C);
-          color: white;
-          padding: 1rem 1.5rem;
-          border-radius: var(--radius-full);
-          font-weight: 900;
-          font-size: 1.1rem;
-          box-shadow: 0 10px 25px rgba(245, 158, 11, 0.4);
-          border: 3px solid white;
-          cursor: pointer;
-          z-index: 50;
-          transition: transform 0.2s;
-        }
-        .ranking-fab:hover { transform: scale(1.1); }
-
-        .ranking-modal {
-          position: fixed;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          width: 90%;
-          max-width: 400px;
-          background: white;
-          z-index: 100;
-          padding: 2rem;
-          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-          border: 4px solid var(--warning);
-          border-radius: var(--radius-lg);
-        }
-
-        .ranking-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 1.5rem;
-          border-bottom: 2px solid var(--border-light);
-          padding-bottom: 1rem;
-        }
-
-        .ranking-header button {
-          background: var(--danger-light);
-          color: var(--danger);
-          border: none;
-          width: 30px; height: 30px;
-          border-radius: 50%;
-          cursor: pointer;
-          font-weight: bold;
-        }
-
-        .ranking-list { display: flex; flex-direction: column; gap: 10px; }
-        .ranking-item {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          padding: 10px;
-          border-radius: var(--radius-md);
-          background: var(--background);
-          font-weight: 800;
-        }
-        .ranking-item.first { background: #FEF3C7; color: #B45309; }
-        .ranking-item.second { background: #F3F4F6; color: #374151; }
-        .ranking-item.third { background: #FFEDD5; color: #9A3412; }
-        .ranking-item .score { margin-left: auto; color: var(--text-muted); }
-        .ranking-item .avatar { font-size: 1.5rem; }
 
         .subjects-nav {
           display: flex;
@@ -318,43 +228,6 @@ export default function MainMap({ userGrade, currentProfile, completedTopics, on
           border-color: var(--s-color);
           box-shadow: 0 4px 10px rgba(0,0,0,0.05);
           transform: scale(1.05);
-        }
-
-        /* Fliperama Banner */
-        .fliperama-banner {
-          display: flex;
-          align-items: center;
-          gap: 1.5rem;
-          padding: 1.5rem 2rem;
-          margin-bottom: 2rem;
-          background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(236, 72, 153, 0.1));
-          border: 1px solid rgba(139, 92, 246, 0.3);
-          border-radius: var(--radius-lg);
-          cursor: pointer;
-          transition: transform 0.2s, box-shadow 0.2s;
-        }
-
-        .fliperama-banner:hover {
-          transform: translateY(-5px);
-          box-shadow: 0 15px 30px rgba(139, 92, 246, 0.2);
-          background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(236, 72, 153, 0.15));
-        }
-
-        .fliperama-icon {
-          font-size: 3rem;
-          animation: float 3s ease-in-out infinite;
-        }
-
-        .fliperama-info h3 {
-          margin: 0 0 0.5rem 0;
-          color: var(--primary);
-          font-size: 1.5rem;
-        }
-
-        .fliperama-info p {
-          margin: 0;
-          color: var(--text-main);
-          font-size: 1rem;
         }
 
         /* Grid Livre */
@@ -402,6 +275,204 @@ export default function MainMap({ userGrade, currentProfile, completedTopics, on
           color: white;
           margin-bottom: 1rem;
           box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        .difficulty-modal-backdrop {
+          position: fixed;
+          inset: 0;
+          z-index: 1100;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          overflow-y: auto;
+          padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+          background: rgba(15, 23, 42, 0.68);
+          backdrop-filter: blur(6px);
+        }
+
+        .difficulty-modal {
+          position: relative;
+          width: min(100%, 460px);
+          max-height: 100%;
+          overflow-y: auto;
+          padding: 28px;
+          border: 1px solid rgba(157, 116, 255, 0.2);
+          border-radius: 26px;
+          background: #fff;
+          box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+          text-align: center;
+        }
+
+        .difficulty-modal-close {
+          position: absolute;
+          top: 12px;
+          right: 14px;
+          width: 36px;
+          height: 36px;
+          border: 0;
+          border-radius: 50%;
+          background: #f1f5f9;
+          color: #64748b;
+          cursor: pointer;
+          font: inherit;
+          font-size: 1.5rem;
+          line-height: 1;
+        }
+
+        .difficulty-modal-icon {
+          display: block;
+          margin: 0 auto 8px;
+          font-size: 2.4rem;
+        }
+
+        .difficulty-modal-eyebrow {
+          color: #7c3aed;
+          font-size: 0.7rem;
+          font-weight: 900;
+          letter-spacing: 1px;
+        }
+
+        .difficulty-modal h2 {
+          margin-top: 6px;
+          color: #1e293b;
+          font-size: 1.55rem;
+        }
+
+        .difficulty-modal-topic {
+          margin-top: 6px;
+          color: #64748b;
+          font-size: 0.9rem;
+          font-weight: 700;
+        }
+
+        .difficulty-options {
+          display: grid;
+          gap: 9px;
+          margin-top: 22px;
+          text-align: left;
+        }
+
+        .difficulty-option {
+          display: flex;
+          width: 100%;
+          min-width: 0;
+          align-items: center;
+          gap: 12px;
+          padding: 12px;
+          border: 2px solid #e2e8f0;
+          border-radius: 16px;
+          background: #fff;
+          color: #334155;
+          cursor: pointer;
+          font: inherit;
+          text-align: left;
+          transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+        }
+
+        .difficulty-option:hover {
+          border-color: #c4b5fd;
+          transform: translateY(-1px);
+        }
+
+        .difficulty-option.selected {
+          border-color: #8b5cf6;
+          background: #f5f3ff;
+        }
+
+        .difficulty-option-icon {
+          display: grid;
+          width: 40px;
+          height: 40px;
+          flex: 0 0 auto;
+          place-items: center;
+          border-radius: 12px;
+          background: #f1f5f9;
+          font-size: 1.35rem;
+        }
+
+        .difficulty-option-copy {
+          display: flex;
+          min-width: 0;
+          flex: 1;
+          flex-direction: column;
+          gap: 2px;
+        }
+
+        .difficulty-option-copy strong {
+          font-size: 0.95rem;
+        }
+
+        .difficulty-option-copy small {
+          color: #64748b;
+          font-size: 0.75rem;
+        }
+
+        .difficulty-option-check {
+          display: grid;
+          width: 24px;
+          height: 24px;
+          flex: 0 0 auto;
+          place-items: center;
+          border: 2px solid #cbd5e1;
+          border-radius: 50%;
+          color: #fff;
+          font-size: 0.8rem;
+          font-weight: 900;
+        }
+
+        .difficulty-option.selected .difficulty-option-check {
+          border-color: #7c3aed;
+          background: #7c3aed;
+        }
+
+        .difficulty-modal-actions {
+          display: flex;
+          gap: 10px;
+          margin-top: 18px;
+        }
+
+        .difficulty-cancel,
+        .difficulty-start {
+          min-height: 46px;
+          flex: 1;
+          border: 0;
+          border-radius: 13px;
+          cursor: pointer;
+          font: inherit;
+          font-weight: 800;
+        }
+
+        .difficulty-cancel {
+          background: #f1f5f9;
+          color: #475569;
+        }
+
+        .difficulty-start {
+          background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+          color: #fff;
+          box-shadow: 0 6px 14px rgba(109, 40, 217, 0.22);
+        }
+
+        .difficulty-start:disabled {
+          cursor: not-allowed;
+          opacity: 0.45;
+          box-shadow: none;
+        }
+
+        @media (max-width: 420px) {
+          .difficulty-modal {
+            padding: 24px 18px 18px;
+            border-radius: 22px;
+          }
+
+          .difficulty-modal h2 {
+            font-size: 1.35rem;
+          }
+
+          .difficulty-option {
+            gap: 9px;
+            padding: 10px;
+          }
         }
         
         .topic-content {

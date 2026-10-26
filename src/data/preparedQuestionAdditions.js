@@ -14,6 +14,34 @@ function prepareQuestions(subject, topic, entries) {
 export const preparedQuestionAdditions = {
   portugues: {
     '9': {
+      periodo_composto: prepareQuestions('portugues', 'periodo_composto', [
+        ['Em “Leu o artigo e anotou os argumentos”, a conjunção “e” introduz uma oração coordenada sindética:', 'aditiva.', ['adversativa.', 'alternativa.', 'conclusiva.'], 0],
+        ['Em “Ou revisamos as citações, ou retiramos o trecho”, a relação entre as orações é de:', 'alternância.', ['explicação.', 'conclusão.', 'oposição concessiva.'], 0],
+      ]),
+      oracoes_substantivas: prepareQuestions('portugues', 'oracoes_substantivas', [
+        ['Em “A turma espera que o passeio seja confirmado”, a oração iniciada por “que” é substantiva:', 'objetiva direta.', ['predicativa.', 'subjetiva.', 'completiva nominal.'], 0],
+        ['Em “Só peço uma coisa: que você confira os dados”, a oração após os dois-pontos é substantiva:', 'apositiva.', ['objetiva direta.', 'completiva nominal.', 'predicativa.'], 0],
+      ]),
+      oracoes_adjetivas_adverbiais: prepareQuestions('portugues', 'oracoes_adjetivas_adverbiais', [
+        ['Em “Embora o texto fosse curto, apresentou bons argumentos”, a oração inicial expressa:', 'concessão.', ['causa.', 'condição.', 'finalidade.'], 0],
+        ['Em “Quando terminou a entrevista, a aluna organizou as anotações”, a oração inicial indica:', 'tempo.', ['causa.', 'concessão.', 'comparação.'], 0],
+      ]),
+      concordancia_regencia_crase: prepareQuestions('portugues', 'concordancia_regencia_crase', [
+        ['Qual frase usa corretamente a crase?', 'A turma retornou à sala para concluir a atividade.', ['A turma começou à revisar a atividade.', 'Os estudantes chegaram à pé.', 'A professora entregou o material à uma aluna.'], 0],
+        ['Complete corretamente: “_____ muitos motivos para revisar as fontes.”', 'Há.', ['Hão.', 'Havia-se.', 'Existia.'], 0],
+      ]),
+      pontuacao_colocacao_pronominal: prepareQuestions('portugues', 'pontuacao_colocacao_pronominal', [
+        ['Em “Não se deve publicar uma informação sem checá-la”, o pronome “se” aparece antes do verbo porque:', 'a palavra negativa “não” atrai o pronome, ocorrendo próclise.', ['todo pronome deve vir antes do verbo.', 'a frase está no futuro e exige mesóclise.', 'o verbo está no imperativo afirmativo.'], 0],
+        ['Qual pontuação pode introduzir uma fala em um diálogo narrativo?', 'Travessão.', ['Ponto e vírgula obrigatoriamente.', 'Parênteses em qualquer situação.', 'Vírgula entre sujeito e verbo.'], 0],
+      ]),
+      producao_textual_coesao: prepareQuestions('portugues', 'producao_textual_coesao', [
+        ['Qual sequência organiza a estrutura básica de um texto dissertativo-argumentativo?', 'Introdução com tese, desenvolvimento com argumentos e conclusão.', ['Conclusão, título e lista de personagens.', 'Exemplos sem tese, seguidos de uma pergunta.', 'Citações soltas sem introdução ou conclusão.'], 0],
+        ['Na revisão de um artigo de opinião, é importante verificar se:', 'os argumentos sustentam a tese e os conectivos articulam as ideias.', ['todos os parágrafos começam com o mesmo conectivo.', 'a conclusão introduz um tema sem relação com o texto.', 'as fontes foram omitidas para deixar a leitura mais rápida.'], 0],
+      ]),
+      literatura_piauiense: prepareQuestions('portugues', 'literatura_piauiense', [
+        ['Fontes Ibiapina, Da Costa e Silva e H. Dobal são estudados como autores relacionados à:', 'literatura piauiense.', ['literatura exclusivamente portuguesa medieval.', 'literatura oral da Grécia Antiga.', 'produção jornalística sem relação com literatura.'], 0],
+        ['Relacionar uma obra literária piauiense ao seu contexto ajuda o leitor a:', 'perceber relações entre escolhas do texto, cultura, história e sociedade.', ['dispensar a leitura e analisar apenas o lugar de nascimento do autor.', 'encontrar uma única interpretação obrigatória.', 'ignorar os recursos de linguagem da obra.'], 0],
+      ]),
       multissemiose_publicidade: prepareQuestions('portugues', 'multissemiose_publicidade', [
         ['Em um cartaz contra o desperdício de água, a imagem de uma torneira seca junto da frase “Cada gota conta” combina linguagens para:', 'reforçar visualmente a urgência da mensagem.', ['contradizer a frase e defender o desperdício.', 'substituir toda a mensagem por uma informação científica.', 'evitar que o leitor interprete o cartaz.'], 0],
         ['Um anúncio usa letras grandes e cores contrastantes na palavra “ATENÇÃO”. Esse recurso visual busca principalmente:', 'destacar a informação e chamar a atenção do público.', ['esconder a informação principal.', 'indicar que o anúncio não tem destinatário.', 'transformar o texto em uma narrativa ficcional.'], 1],

@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { createQuestionRound, getPreparedQuestions, recordQuestionAnswer } from '../data/questionBank';
 
 const QUESTIONS_PER_PHASE = 15;
 
-export default function QuizGame({ subject, grade, topic, onComplete, onExit }) {
+export default function QuizGame({ subject, grade, topic, initialDifficulty = 'misturado', onComplete, onExit }) {
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
   const [score, setScore] = useState(0);
   const [phaseScore, setPhaseScore] = useState(0);
@@ -12,8 +13,10 @@ export default function QuizGame({ subject, grade, topic, onComplete, onExit }) 
   const [currentPhase, setCurrentPhase] = useState(1);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [isAnswerChecked, setIsAnswerChecked] = useState(false);
-  const [difficulty, setDifficulty] = useState('misturado');
+  const [difficulty, setDifficulty] = useState(initialDifficulty);
   const [wrongAnswers, setWrongAnswers] = useState([]);
+  const [isSavingResult, setIsSavingResult] = useState(false);
+  const [completionError, setCompletionError] = useState('');
   const subjectId = subject?.id || subject?.name;
   const preparedQuestions = useMemo(
     () => getPreparedQuestions(subjectId, grade, topic.id),
@@ -27,12 +30,36 @@ export default function QuizGame({ subject, grade, topic, onComplete, onExit }) 
     difficulty,
   }), [preparedQuestions, subjectId, grade, topic.id, difficulty]);
   const totalQuestions = roundQuestions.length;
+  const isApproved = score / 100 >= Math.ceil(totalQuestions / 2);
   const phaseCount = Math.max(1, Math.ceil(totalQuestions / QUESTIONS_PER_PHASE));
   const questions = roundQuestions.slice(
     (currentPhase - 1) * QUESTIONS_PER_PHASE,
     currentPhase * QUESTIONS_PER_PHASE
   );
   const currentQuestion = questions[currentQuestionIdx];
+
+  const handleFinish = async () => {
+    if (isSavingResult) return;
+    setIsSavingResult(true);
+    setCompletionError('');
+    try {
+      await onComplete(score, !isApproved);
+    } catch (error) {
+      console.error('Erro ao finalizar quiz:', error);
+      if (error?.code === 'permission-denied') {
+        setCompletionError('O Firebase recusou o salvamento dos pontos (permission-denied). As regras do Firestore precisam permitir que sua conta atualize o próprio perfil.');
+      } else if (error?.code === 'unauthenticated') {
+        setCompletionError('Sua sessão expirou. Entre novamente e tente finalizar a fase.');
+      } else if (error?.code === 'unavailable' || error?.code === 'deadline-exceeded') {
+        setCompletionError('O Firebase está indisponível no momento. Verifique sua conexão e tente salvar os pontos novamente.');
+      } else {
+        const detail = error?.code || error?.message || 'erro sem detalhes';
+        setCompletionError(`Não foi possível salvar seus pontos (${detail}). Verifique sua conexão e tente novamente.`);
+      }
+    } finally {
+      setIsSavingResult(false);
+    }
+  };
 
   const handleDifficultyChange = (event) => {
     setDifficulty(event.target.value);
@@ -59,8 +86,8 @@ export default function QuizGame({ subject, grade, topic, onComplete, onExit }) 
     const isWrong = selectedAnswer !== currentQuestion.correta;
     recordQuestionAnswer(currentQuestion.id, isWrong);
     if (!isWrong) {
-      setScore(score + 100);
-      setPhaseScore(phaseScore + 100);
+      setScore(prev => prev + 100);
+      setPhaseScore(prev => prev + 100);
     } else {
       setWrongAnswers(answers => [...answers, {
         question: currentQuestion,
@@ -131,7 +158,6 @@ export default function QuizGame({ subject, grade, topic, onComplete, onExit }) 
   if (showResult) {
     const acertos = score / 100;
     const nota = ((acertos / totalQuestions) * 10).toFixed(1);
-    const isApproved = acertos >= Math.ceil(totalQuestions / 2);
     
     return (
       <div className="quiz-result-card glass-card animate-float" style={{ animationDuration: '4s' }}>
@@ -168,8 +194,9 @@ export default function QuizGame({ subject, grade, topic, onComplete, onExit }) 
           </section>
         )}
         
-        <button className="btn btn-primary" onClick={() => onComplete(score, !isApproved)} style={{ marginTop: '1rem', padding: '1rem 3rem' }}>
-          Finalizar Fase
+        {completionError && <p role="alert" style={{ color: 'var(--danger)', fontWeight: 700 }}>{completionError}</p>}
+        <button className="btn btn-primary" onClick={handleFinish} disabled={isSavingResult} style={{ marginTop: '1rem', padding: '1rem 3rem' }}>
+          {isSavingResult ? <><Loader2 className="spin" size={18} /> Salvando pontos...</> : 'Finalizar Fase'}
         </button>
         
         <style>{`
