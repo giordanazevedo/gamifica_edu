@@ -99,7 +99,7 @@ export default function MainMap({ userGrade, completedTopics, onSelectTopic, ini
                     {isCompleted ? '✓ Concluído' : '▶ Iniciar Missão'}
                   </span>
                   <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                    30 Questões
+                    15 por rodada
                   </span>
                 </div>
               </div>

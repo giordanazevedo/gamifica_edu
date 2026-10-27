@@ -4,7 +4,7 @@ import { createQuestionRound, getPreparedQuestions, recordQuestionAnswer } from 
 
 const QUESTIONS_PER_PHASE = 15;
 
-export default function QuizGame({ subject, grade, topic, initialDifficulty = 'misturado', onComplete, onExit }) {
+export default function QuizGame({ subject, grade, topic, initialDifficulty = 'misturado', onComplete, onCorrectAnswer, onQuestionAnswered, onExit }) {
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
   const [score, setScore] = useState(0);
   const [phaseScore, setPhaseScore] = useState(0);
@@ -85,9 +85,12 @@ export default function QuizGame({ subject, grade, topic, initialDifficulty = 'm
     setIsAnswerChecked(true);
     const isWrong = selectedAnswer !== currentQuestion.correta;
     recordQuestionAnswer(currentQuestion.id, isWrong);
+    onQuestionAnswered?.(currentQuestion.id);
     if (!isWrong) {
       setScore(prev => prev + 100);
       setPhaseScore(prev => prev + 100);
+      // Credita os pontos na hora, mesmo que o aluno saia antes de finalizar
+      onCorrectAnswer?.(100)?.catch?.(error => console.error('Erro ao creditar XP do acerto:', error));
     } else {
       setWrongAnswers(answers => [...answers, {
         question: currentQuestion,

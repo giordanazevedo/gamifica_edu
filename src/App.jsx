@@ -14,21 +14,26 @@ import BattleInviteModal from './components/BattleInviteModal';
 import AvatarDisplay from './components/AvatarDisplay';
 import MultiplicationChallenge from './components/MultiplicationChallenge';
 import { updatePresence, getOrGenerateFriendCode } from './services/pvpService';
+import { mergeAnsweredQuestions, setQuestionProgressUser } from './data/questionBank';
 
 function App() {
   const {
     user,
     profile,
+    todayKey,
     loading,
     error: authError,
     register,
     login,
     loginWithGoogle,
+    resetPassword,
     logout,
     updateAccountProfile,
     completeFirstVisitSetup,
     saveProgress,
     addQuizReward,
+    addXp,
+    markQuestionAnswered,
     addBattleReward,
     fetchRanking,
   } = useAuth();
@@ -43,11 +48,9 @@ function App() {
 
   // Estado local do jogo (sincronizado com profile do Firebase)
   const [xp, setXp] = useState(0);
-  const [medals, setMedals] = useState([]);
   const [lives, setLives] = useState(3);
   const [completedTopics, setCompletedTopics] = useState([]);
   const [avatar, setAvatar] = useState('👦🏽');
-  const [unlockedAvatars, setUnlockedAvatars] = useState(['👦🏽']);
   const [streak, setStreak] = useState(1);
   const presenceName = profile?.name || 'Jogador';
   const storedFriendCode = profile?.friendCode;
@@ -60,13 +63,18 @@ function App() {
   useEffect(() => {
     if (profile) {
       setXp(profile.xp || 0);
-      setMedals(profile.medals || []);
       setCompletedTopics(profile.completedTopics || []);
       setAvatar(profile.avatar || '👦🏽');
-      setUnlockedAvatars(profile.unlockedAvatars || ['👦🏽']);
       setStreak(profile.streak || 1);
     }
   }, [profile]);
+
+  const answeredQuestions = profile?.answeredQuestions;
+  const currentUid = user?.uid;
+  useEffect(() => {
+    setQuestionProgressUser(currentUid);
+    mergeAnsweredQuestions(answeredQuestions);
+  }, [currentUid, answeredQuestions]);
 
   // Atualiza presença online e código de amigo
   useEffect(() => {
@@ -89,16 +97,14 @@ function App() {
     }
   }, [user?.uid, presenceFriendCode]);
 
-  // Salva no Firebase toda vez que XP/medals/topics mudam
+  // Salva alterações pontuais do perfil no Firebase
   const persistProgress = useCallback((updates) => {
     saveProgress(updates);
   }, [saveProgress]);
 
   const handleMinigameWin = (earnedXp) => {
-    const newXp = xp + earnedXp;
-    setXp(newXp);
     setLives(prev => Math.min(3, prev + 1));
-    persistProgress({ xp: newXp, medals, completedTopics, avatar, unlockedAvatars, streak });
+    addXp(earnedXp).catch(() => {});
   };
 
   // Regeneração de vidas
@@ -117,6 +123,8 @@ function App() {
       return await register(data);
     } else if (action === 'google') {
       return await loginWithGoogle(data);
+    } else if (action === 'reset') {
+      return await resetPassword(data.email);
     }
   };
 
@@ -124,10 +132,8 @@ function App() {
     await logout();
     setCurrentScreen('dashboard');
     setXp(0);
-    setMedals([]);
     setCompletedTopics([]);
     setAvatar('👦🏽');
-    setUnlockedAvatars(['👦🏽']);
     setStreak(1);
     setLives(3);
   };
@@ -149,25 +155,26 @@ function App() {
     setCurrentScreen('quiz');
   };
 
+  // O XP do modo solo já é creditado a cada acerto (addXp); aqui só registramos conclusão e medalha
   const handleQuizComplete = async (earnedXp, isFailure) => {
     const topicKey = `${selectedSubject.id}_${profile?.grade}_${selectedTopic.id}`;
-    const medal = earnedXp > 0
+    // Só dados simples vão para o Firestore: o ícone da matéria é um componente React
+    const medal = earnedXp > 0 && !isFailure
       ? {
         id: topicKey,
-        icon: selectedSubject.icon,
+        subjectId: selectedSubject.id,
         name: `Mestre em ${selectedTopic.title}`,
       }
       : null;
 
     try {
       const updatedProfile = await addQuizReward({
-        earnedXp,
+        earnedXp: 0,
         completedTopicKey: isFailure ? null : topicKey,
         medal,
       });
       setXp(updatedProfile.xp);
       setCompletedTopics(updatedProfile.completedTopics);
-      setMedals(updatedProfile.medals);
       if (isFailure) setLives(prev => Math.max(0, prev - 1));
       setCurrentScreen('map');
       return { success: true };
@@ -177,18 +184,10 @@ function App() {
     }
   };
 
-  const handleBuyAvatar = (id, cost) => {
-    const newXp = xp - cost;
-    const newUnlocked = [...unlockedAvatars, id];
-    setXp(newXp);
-    setUnlockedAvatars(newUnlocked);
-    setAvatar(id);
-    persistProgress({ xp: newXp, medals, completedTopics, avatar: id, unlockedAvatars: newUnlocked, streak });
-  };
-
+  // Envia só o avatar: reenviar XP/medalhas daqui poderia apagar pontos ganhos em outro aparelho
   const handleEquipAvatar = (id) => {
     setAvatar(id);
-    persistProgress({ xp, medals, completedTopics, avatar: id, unlockedAvatars, streak });
+    persistProgress({ avatar: id });
   };
 
   // === Loading Screen ===
@@ -351,7 +350,7 @@ function App() {
             <Dashboard
               xp={xp}
               streak={streak}
-              completedTopics={completedTopics}
+              completedToday={profile.dailyProgress?.date === todayKey ? profile.dailyProgress.completed || 0 : 0}
               onNavigate={handleNavigate}
             />
           )}
@@ -379,6 +378,8 @@ function App() {
               topic={selectedTopic}
               initialDifficulty={selectedDifficulty}
               onComplete={handleQuizComplete}
+              onCorrectAnswer={addXp}
+              onQuestionAnswered={markQuestionAnswered}
               onExit={() => setCurrentScreen('map')}
             />
           )}

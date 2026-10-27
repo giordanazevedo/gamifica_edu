@@ -1,9 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
-import { submitBattleAnswer } from '../services/pvpService';
-import { Zap, Swords, Clock, Heart, Award, ArrowLeft, CheckCircle2, XCircle, RotateCcw } from 'lucide-react';
+import { submitBattleAnswer, cancelQuickMatch, claimBattleReward } from '../services/pvpService';
+import { Zap, Swords, Clock, Award, ArrowLeft, CheckCircle2, XCircle } from 'lucide-react';
 import AvatarDisplay from './AvatarDisplay';
+
+const WIN_XP = 300;
+const DRAW_XP = 150;
+const PARTICIPATION_XP = 75;
 
 export default function PvPBattleArena({
   battleId,
@@ -21,6 +25,7 @@ export default function PvPBattleArena({
   const [rewardGranted, setRewardGranted] = useState(false);
 
   const timerRef = useRef(null);
+  const rewardRequested = useRef(false);
 
   // Escuta a sala de batalha em TEMPO REAL via Firestore
   useEffect(() => {
@@ -36,17 +41,18 @@ export default function PvPBattleArena({
     return () => unsub();
   }, [battleId]);
 
-  // Contagem regressiva inicial antes do duelo
+  const isLive = battle?.status === 'in_progress';
+
+  // Contagem regressiva inicial: só começa quando os dois jogadores estão na sala
   useEffect(() => {
-    if (inCountdown) {
-      if (countdown > 0) {
-        const t = setTimeout(() => setCountdown(c => c - 1), 1000);
-        return () => clearTimeout(t);
-      } else {
-        setInCountdown(false);
-      }
+    if (!isLive || !inCountdown) return undefined;
+    if (countdown > 0) {
+      const t = setTimeout(() => setCountdown(c => c - 1), 1000);
+      return () => clearTimeout(t);
     }
-  }, [inCountdown, countdown]);
+    setInCountdown(false);
+    return undefined;
+  }, [isLive, inCountdown, countdown]);
 
   const isPlayer1 = battle?.player1?.uid === currentUid;
   const me = isPlayer1 ? battle?.player1 : battle?.player2;
@@ -73,27 +79,21 @@ export default function PvPBattleArena({
     setTimer(30);
   }, [currentIdx]);
 
-  // Cronômetro da pergunta ativa
+  // Cronômetro da pergunta ativa (não corre enquanto espera o oponente)
   useEffect(() => {
-    if (inCountdown || isFinished || isAnswered || !currentQuestion) return;
+    if (!isLive || inCountdown || isAnswered || !currentQuestion) return undefined;
 
     timerRef.current = setInterval(() => {
-      setTimer((prev) => {
-        if (prev <= 1) {
-          clearInterval(timerRef.current);
-          handleTimeOut();
-          return 0;
-        }
-        return prev - 1;
-      });
+      setTimer((prev) => Math.max(0, prev - 1));
     }, 1000);
 
     return () => clearInterval(timerRef.current);
-  }, [inCountdown, isFinished, isAnswered, currentIdx, currentQuestion]);
+  }, [isLive, inCountdown, isAnswered, currentIdx, currentQuestion]);
 
   // Trata tempo esgotado
-  const handleTimeOut = () => {
-    if (isAnswered) return;
+  useEffect(() => {
+    if (timer > 0 || isAnswered || !isLive || inCountdown || !currentQuestion) return;
+    clearInterval(timerRef.current);
     setIsAnswered(true);
     setRoundFeedback('timeout');
 
@@ -104,11 +104,11 @@ export default function PvPBattleArena({
       isCorrect: false,
       pointsEarned: 0
     });
-  };
+  }, [timer, isAnswered, isLive, inCountdown, currentQuestion, battleId, isPlayer1, currentIdx]);
 
   // Trata clique na resposta
   const handleSelectOption = (idx) => {
-    if (isAnswered || inCountdown || isFinished) return;
+    if (isAnswered || inCountdown || !isLive) return;
     clearInterval(timerRef.current);
 
     setSelectedOption(idx);
@@ -129,21 +129,46 @@ export default function PvPBattleArena({
     });
   };
 
-  // Concede recompensa de XP e vitória no final da batalha
-  useEffect(() => {
-    if (isFinished && !rewardGranted && onFinishReward && me) {
-      let earnedXp = 75; // XP de participação
-      const isWinner = battle.winner === currentUid;
-      if (isWinner) {
-        earnedXp = 300; // XP de vitória no Ranking!
-      } else if (battle.winner === 'draw') {
-        earnedXp = 150;
-      }
+  const isWinner = battle?.winner === currentUid;
+  const isDraw = battle?.winner === 'draw';
+  const earnedXp = isWinner ? WIN_XP : isDraw ? DRAW_XP : PARTICIPATION_XP;
 
-      onFinishReward(earnedXp, isWinner);
-      setRewardGranted(true);
-    }
-  }, [isFinished, rewardGranted, battle?.winner, currentUid, me, onFinishReward]);
+  // Concede recompensa de XP uma única vez por batalha (registrado na própria sala)
+  useEffect(() => {
+    if (!isFinished || !me || !onFinishReward || rewardRequested.current) return;
+    rewardRequested.current = true;
+    claimBattleReward(battleId, currentUid)
+      .then((claimed) => {
+        if (claimed) onFinishReward(earnedXp, isWinner);
+        setRewardGranted(claimed);
+      })
+      .catch((error) => console.error('Erro ao resgatar recompensa da batalha:', error));
+  }, [isFinished, me, onFinishReward, battleId, currentUid, earnedXp, isWinner]);
+
+  const handleCancelWaiting = async () => {
+    if (isPlayer1) await cancelQuickMatch(battleId);
+    onExit();
+  };
+
+  if (!battle) {
+    return (
+      <div className="arena-waiting-container">
+        <p>Carregando a sala de batalha...</p>
+      </div>
+    );
+  }
+
+  if (battle.status === 'cancelled') {
+    return (
+      <div className="arena-waiting-container">
+        <h2>Duelo cancelado</h2>
+        <p>Esta batalha foi cancelada ou o desafio foi recusado.</p>
+        <button className="back-lobby-btn" onClick={onExit}>
+          Voltar para o Lobby de Batalha
+        </button>
+      </div>
+    );
+  }
 
   // Se ainda estiver aguardando oponente aceitar
   if (battle?.status === 'waiting' || battle?.status === 'waiting_quickmatch') {
@@ -187,7 +212,7 @@ export default function PvPBattleArena({
               <Swords size={15} />
               Duelo de {battle.subject?.toUpperCase() || 'GERAL'}
             </span>
-            <button className="cancel-match-btn" onClick={onExit}>
+            <button className="cancel-match-btn" onClick={handleCancelWaiting}>
               <ArrowLeft size={17} />
               Cancelar e voltar ao lobby
             </button>
@@ -442,7 +467,7 @@ export default function PvPBattleArena({
   }
 
   // Contagem regressiva antes de iniciar
-  if (inCountdown) {
+  if (inCountdown && !isFinished) {
     return (
       <div className="duel-intro">
         <div className="duel-intro-glow" />
@@ -676,9 +701,6 @@ export default function PvPBattleArena({
 
   // TELA DE VITÓRIA / DERROTA
   if (isFinished) {
-    const isWinner = battle?.winner === currentUid;
-    const isDraw = battle?.winner === 'draw';
-
     return (
       <div className="arena-result-container">
         <div className={`result-card ${isWinner ? 'win' : isDraw ? 'draw' : 'lose'}`}>
@@ -727,9 +749,9 @@ export default function PvPBattleArena({
           <div className="xp-reward-box">
             <Zap size={22} color="#eab308" />
             <span>
-              +{isWinner ? '250' : isDraw ? '120' : '50'} XP
+              +{earnedXp} XP
             </span>
-            <small>adicionados ao ranking</small>
+            <small>{rewardGranted ? 'adicionados ao ranking' : 'recompensa desta batalha'}</small>
           </div>
 
           <button className="back-lobby-btn" onClick={onExit}>
@@ -993,7 +1015,7 @@ export default function PvPBattleArena({
               <div className="hud-hp-bar">
                 <div
                   className="hud-hp-fill me-hp"
-                  style={{ width: `${Math.max(5, me?.health || 100)}%` }}
+                  style={{ width: `${Math.max(5, me?.health ?? 100)}%` }}
                 ></div>
               </div>
             )}
@@ -1020,7 +1042,7 @@ export default function PvPBattleArena({
               <div className="hud-hp-bar">
                 <div
                   className="hud-hp-fill opp-hp"
-                  style={{ width: `${Math.max(5, opponent?.health || 100)}%` }}
+                  style={{ width: `${Math.max(5, opponent?.health ?? 100)}%` }}
                 ></div>
               </div>
             )}

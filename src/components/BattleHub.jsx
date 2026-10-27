@@ -5,15 +5,10 @@ import {
   Users,
   Globe,
   UserPlus,
-  Zap,
   Copy,
   Check,
-  Shield,
   Loader2,
   Play,
-  ArrowRight,
-  Flame,
-  Award,
   Trash2
 } from 'lucide-react';
 import AvatarDisplay from './AvatarDisplay';
@@ -145,6 +140,16 @@ export default function BattleHub({
       }
     );
   }, [currentMatchId, onStartBattle]);
+
+  // Se o jogador sair do lobby enquanto procura oponente, a sala é cancelada
+  // para ninguém entrar em uma partida abandonada.
+  const pendingMatchIdRef = useRef(null);
+  useEffect(() => {
+    pendingMatchIdRef.current = currentMatchId;
+  }, [currentMatchId]);
+  useEffect(() => () => {
+    if (pendingMatchIdRef.current) cancelQuickMatch(pendingMatchIdRef.current);
+  }, []);
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(myFriendCode);
