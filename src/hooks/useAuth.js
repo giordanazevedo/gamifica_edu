@@ -1,5 +1,5 @@
 // Hook centralizado para toda a lógica de autenticação e dados do usuário
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -8,7 +8,8 @@ import {
   updateProfile,
   GoogleAuthProvider,
   signInWithPopup,
-  signInWithCredential
+  signInWithCredential,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import { Capacitor } from '@capacitor/core';
 import { SocialLogin } from '@capgo/capacitor-social-login';
@@ -24,17 +25,43 @@ import {
   getDocs,
   serverTimestamp,
   increment,
+  arrayUnion,
   runTransaction
 } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 
 let nativeGoogleLoginInitialization = null;
 
+// Data local no formato AAAA-MM-DD (usada para contar dias seguidos)
+function getLocalDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getNextStreak(currentProfile, todayKey) {
+  const currentStreak = Number.isFinite(currentProfile.streak) && currentProfile.streak > 0
+    ? currentProfile.streak
+    : 1;
+  const lastActiveDate = currentProfile.lastActiveDate;
+  if (lastActiveDate === todayKey) return currentStreak;
+
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (lastActiveDate === getLocalDateKey(yesterday)) return currentStreak + 1;
+
+  // Perfis antigos sem data registrada mantêm a sequência atual
+  if (!lastActiveDate) return currentStreak;
+  return 1;
+}
+
 export function useAuth() {
   const [user, setUser] = useState(null);       // dados do Firebase Auth
   const [profile, setProfile] = useState(null); // dados do Firestore
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const pendingXpWrites = useRef(new Set());
 
   // Escuta mudanças de autenticação
   useEffect(() => {
@@ -64,11 +91,52 @@ export function useAuth() {
         if (profileData.grade !== snap.data().grade && profileData.role !== 'professor') {
           await updateDoc(ref, { grade: '9' });
         }
+        await registerDailyActivity(uid);
       }
     } catch (e) {
       console.error('Erro ao carregar perfil:', e);
     }
   };
+
+  // Atualiza a sequência de dias seguidos uma vez por dia
+  const registerDailyActivity = async (uid) => {
+    const todayKey = getLocalDateKey();
+    const ref = doc(db, 'users', uid);
+    try {
+      const updates = await runTransaction(db, async (transaction) => {
+        const snap = await transaction.get(ref);
+        if (!snap.exists()) return null;
+        const currentProfile = snap.data();
+        if (currentProfile.lastActiveDate === todayKey) return null;
+        const nextUpdates = {
+          streak: getNextStreak(currentProfile, todayKey),
+          lastActiveDate: todayKey,
+          lastSeen: serverTimestamp(),
+        };
+        transaction.update(ref, nextUpdates);
+        return nextUpdates;
+      });
+      if (updates) {
+        setProfile(prev => prev ? { ...prev, streak: updates.streak, lastActiveDate: updates.lastActiveDate } : prev);
+      }
+    } catch (e) {
+      console.error('Erro ao atualizar dias seguidos:', e);
+    }
+  };
+
+  // Mantém a sequência correta se o app ficar aberto de um dia para o outro
+  useEffect(() => {
+    if (!user?.uid) return undefined;
+    const checkNewDay = () => {
+      if (document.visibilityState === 'visible') registerDailyActivity(user.uid);
+    };
+    const interval = setInterval(checkNewDay, 60 * 60 * 1000);
+    document.addEventListener('visibilitychange', checkNewDay);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', checkNewDay);
+    };
+  }, [user?.uid]);
 
   // Cadastro de novo usuário
   const register = async ({ email, password, role, inviteCode, subject }) => {
@@ -88,6 +156,7 @@ export function useAuth() {
         xp: 0,
         level: 1,
         streak: 1,
+        lastActiveDate: getLocalDateKey(),
         medals: [],
         completedTopics: [],
         avatar: '👦🏽',
@@ -180,6 +249,7 @@ export function useAuth() {
           xp: 0,
           level: 1,
           streak: 1,
+          lastActiveDate: getLocalDateKey(),
           medals: [],
           completedTopics: [],
           avatar: '👦🏽',
@@ -201,6 +271,7 @@ export function useAuth() {
           await updateDoc(ref, { grade: '9' });
         }
         setProfile(profileData);
+        await registerDailyActivity(firebaseUser.uid);
       }
       setUser(firebaseUser);
       return { success: true };
@@ -212,6 +283,18 @@ export function useAuth() {
       const msg = e.code ? translateFirebaseError(e.code) : e.message || 'Não foi possível entrar com Google.';
       setError(msg);
       return { success: false, error: msg };
+    }
+  };
+
+  // Envia e-mail de redefinição de senha
+  const resetPassword = async (email) => {
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+      return { success: true };
+    } catch (e) {
+      // Não revela se o e-mail existe: só erros de formato/conexão são mostrados
+      if (e.code === 'auth/user-not-found') return { success: true };
+      return { success: false, error: translateFirebaseError(e.code) };
     }
   };
 
@@ -281,7 +364,7 @@ export function useAuth() {
       if (avatar !== undefined) updates.avatar = avatar;
       if (unlockedAvatars !== undefined) updates.unlockedAvatars = unlockedAvatars;
       if (streak !== undefined) updates.streak = streak;
-      updates.level = Math.floor((xp || 0) / 1000) + 1;
+      if (xp !== undefined) updates.level = Math.floor(xp / 1000) + 1;
       updates.lastSeen = serverTimestamp();
 
       await updateDoc(ref, updates);
@@ -301,6 +384,8 @@ export function useAuth() {
 
     const ref = doc(db, 'users', user.uid);
     try {
+      // Espera os XP creditados por acerto chegarem ao Firestore antes de ler o perfil
+      await Promise.allSettled([...pendingXpWrites.current]);
       const updatedProfile = await runTransaction(db, async (transaction) => {
         const snap = await transaction.get(ref);
         if (!snap.exists()) {
@@ -320,12 +405,23 @@ export function useAuth() {
         const nextMedals = medal && !medals.some(existingMedal => existingMedal.id === medal.id)
           ? [...medals, medal]
           : medals;
+        // Conta as fases concluídas hoje para a meta diária do painel
+        const todayKey = getLocalDateKey();
+        const previousDaily = currentProfile.dailyProgress?.date === todayKey
+          ? currentProfile.dailyProgress.completed || 0
+          : 0;
+        const dailyProgress = {
+          date: todayKey,
+          completed: previousDaily + (completedTopicKey ? 1 : 0),
+        };
 
+        // increment evita sobrescrever pontos já creditados por resposta
         transaction.update(ref, {
-          xp: nextXp,
+          xp: increment(earnedXp),
           level: Math.floor(nextXp / 1000) + 1,
           completedTopics: nextCompletedTopics,
           medals: nextMedals,
+          dailyProgress,
           lastSeen: serverTimestamp(),
         });
 
@@ -335,6 +431,7 @@ export function useAuth() {
           level: Math.floor(nextXp / 1000) + 1,
           completedTopics: nextCompletedTopics,
           medals: nextMedals,
+          dailyProgress,
         };
       });
 
@@ -343,6 +440,42 @@ export function useAuth() {
     } catch (e) {
       console.error('Erro ao salvar recompensa do quiz:', e);
       throw e;
+    }
+  }, [user]);
+
+  // Credita XP imediatamente (ex.: a cada acerto no modo solo)
+  const addXp = useCallback(async (earnedXp) => {
+    if (!user || !Number.isFinite(earnedXp) || earnedXp <= 0) return;
+    setProfile(prev => {
+      if (!prev) return prev;
+      const nextXp = (prev.xp || 0) + earnedXp;
+      return { ...prev, xp: nextXp, level: Math.floor(nextXp / 1000) + 1 };
+    });
+    const write = updateDoc(doc(db, 'users', user.uid), {
+      xp: increment(earnedXp),
+      lastSeen: serverTimestamp(),
+    });
+    pendingXpWrites.current.add(write);
+    try {
+      await write;
+    } catch (e) {
+      console.error('Erro ao salvar XP:', e);
+      setProfile(prev => prev ? { ...prev, xp: Math.max(0, (prev.xp || 0) - earnedXp) } : prev);
+      throw e;
+    } finally {
+      pendingXpWrites.current.delete(write);
+    }
+  }, [user]);
+
+  // Guarda as perguntas já respondidas no perfil para não repeti-las em outro aparelho
+  const markQuestionAnswered = useCallback(async (questionId) => {
+    if (!user || !questionId) return;
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        answeredQuestions: arrayUnion(questionId),
+      });
+    } catch (e) {
+      console.error('Erro ao salvar pergunta respondida:', e);
     }
   }, [user]);
 
@@ -389,17 +522,21 @@ export function useAuth() {
   return {
     user,
     profile,
+    todayKey: getLocalDateKey(),
     loading,
     error,
     setError,
     register,
     login,
     loginWithGoogle,
+    resetPassword,
     logout,
     updateAccountProfile,
     completeFirstVisitSetup,
     saveProgress,
     addQuizReward,
+    addXp,
+    markQuestionAnswered,
     addBattleReward,
     fetchRanking,
     reloadProfile: () => user && loadProfile(user.uid),

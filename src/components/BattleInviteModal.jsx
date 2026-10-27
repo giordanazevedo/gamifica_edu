@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
-import { acceptBattleInvite, declineBattleInvite } from '../services/pvpService';
-import { Check, X, ShieldAlert } from 'lucide-react';
+import { acceptBattleInvite, declineBattleInvite, isFreshTimestamp } from '../services/pvpService';
+import { Check, X } from 'lucide-react';
 import AvatarDisplay from './AvatarDisplay';
 
 export default function BattleInviteModal({ currentProfile, onAcceptBattle }) {
   const [activeInvite, setActiveInvite] = useState(null);
+  const [inviteError, setInviteError] = useState('');
+  const [isResponding, setIsResponding] = useState(false);
 
   // Escuta convites pendentes em tempo real para este usuário
   useEffect(() => {
@@ -19,12 +21,14 @@ export default function BattleInviteModal({ currentProfile, onAcceptBattle }) {
     );
 
     const unsub = onSnapshot(q, (snapshot) => {
-      if (!snapshot.empty) {
-        const inv = snapshot.docs[0].data();
-        setActiveInvite(inv);
-      } else {
-        setActiveInvite(null);
-      }
+      // Convites antigos (de quando o jogador estava offline) não são mais mostrados
+      const freshInvite = snapshot.docs
+        .map((inviteDoc) => inviteDoc.data())
+        .find((invite) => isFreshTimestamp(invite.createdAt));
+      setActiveInvite(freshInvite || null);
+      setInviteError('');
+    }, (error) => {
+      console.error('Erro ao acompanhar convites de duelo:', error);
     });
 
     return () => unsub();
@@ -33,15 +37,24 @@ export default function BattleInviteModal({ currentProfile, onAcceptBattle }) {
   if (!activeInvite) return null;
 
   const handleAccept = async () => {
+    if (isResponding) return;
+    setIsResponding(true);
+    setInviteError('');
     const res = await acceptBattleInvite(activeInvite, currentProfile);
+    setIsResponding(false);
     if (res.success) {
       onAcceptBattle(activeInvite.battleId);
       setActiveInvite(null);
+    } else {
+      setInviteError(res.error);
     }
   };
 
   const handleDecline = async () => {
+    if (isResponding) return;
+    setIsResponding(true);
     await declineBattleInvite(activeInvite.id, activeInvite.battleId);
+    setIsResponding(false);
     setActiveInvite(null);
   };
 
@@ -67,12 +80,14 @@ export default function BattleInviteModal({ currentProfile, onAcceptBattle }) {
           Prepare seus reflexos! A batalha 1v1 começará assim que você aceitar.
         </p>
 
+        {inviteError && <p className="invite-text" role="alert" style={{ color: '#dc2626', fontWeight: 700 }}>{inviteError}</p>}
+
         <div className="invite-actions">
-          <button className="accept-invite-btn" onClick={handleAccept}>
+          <button className="accept-invite-btn" onClick={handleAccept} disabled={isResponding}>
             <Check size={20} />
             <span>ACEITAR DESAFIO!</span>
           </button>
-          <button className="decline-invite-btn" onClick={handleDecline}>
+          <button className="decline-invite-btn" onClick={handleDecline} disabled={isResponding}>
             <X size={18} />
             <span>Recusar</span>
           </button>

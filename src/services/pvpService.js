@@ -9,25 +9,35 @@ import {
   collection,
   query,
   where,
-  onSnapshot,
   serverTimestamp,
   Timestamp,
-  deleteDoc,
   limit
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { getPreparedQuestionPool } from '../data/questionBank';
 
 const PRESENCE_TIMEOUT_MS = 75_000;
+// Salas de busca rápida e convites mais antigos que isso são considerados abandonados
+const STALE_ROOM_MS = 2 * 60 * 1000;
+
+function getMillis(timestamp) {
+  if (!timestamp) return Number.NaN;
+  if (typeof timestamp.toMillis === 'function') return timestamp.toMillis();
+  if (timestamp instanceof Date) return timestamp.getTime();
+  return Number.NaN;
+}
+
+export function isFreshTimestamp(timestamp, maxAgeMs = STALE_ROOM_MS) {
+  const millis = getMillis(timestamp);
+  // Um serverTimestamp ainda pendente (null) significa que acabou de ser criado
+  if (!timestamp) return true;
+  return Number.isFinite(millis) && Date.now() - millis <= maxAgeMs;
+}
 
 function hasActivePresence(data) {
   if (data.isOnline !== true || !data.lastActive) return false;
 
-  const lastActive = typeof data.lastActive.toMillis === 'function'
-    ? data.lastActive.toMillis()
-    : data.lastActive instanceof Date
-      ? data.lastActive.getTime()
-      : Number.NaN;
+  const lastActive = getMillis(data.lastActive);
   const presenceAge = Date.now() - lastActive;
 
   return Number.isFinite(lastActive) && presenceAge >= -15_000 && presenceAge <= PRESENCE_TIMEOUT_MS;
@@ -211,7 +221,7 @@ export async function fetchFriendsDetails(friendUids = []) {
       if (snap.exists()) {
         const d = snap.data();
         friends.push({
-          uid: d.uid,
+          uid: d.uid || snap.id,
           name: d.name,
           avatar: d.avatar || '👦🏽',
           level: d.level || 1,
@@ -308,25 +318,37 @@ export async function sendBattleInvite(senderProfile, targetUid, subjectId = 'ge
   }
 }
 
-// Aceita convite de duelo
+// Aceita convite de duelo (só se o desafio ainda estiver aguardando)
 export async function acceptBattleInvite(invite, currentProfile) {
   try {
-    // Atualiza status do convite
-    await updateDoc(doc(db, 'invites', invite.id), {
-      status: 'accepted'
-    });
-
-    // Atualiza jogador 2 na batalha e inicia a partida
+    const inviteRef = doc(db, 'invites', invite.id);
     const battleRef = doc(db, 'battles', invite.battleId);
-    await updateDoc(battleRef, {
-      status: 'in_progress',
-      'player2.uid': currentProfile.uid,
-      'player2.name': currentProfile.name,
-      'player2.avatar': currentProfile.avatar || '👦🏽',
-      'player2.ready': true,
-      startedAt: serverTimestamp()
+    const accepted = await runTransaction(db, async (transaction) => {
+      const [inviteSnap, battleSnap] = await Promise.all([
+        transaction.get(inviteRef),
+        transaction.get(battleRef),
+      ]);
+      if (!inviteSnap.exists() || !battleSnap.exists()) return false;
+      if (inviteSnap.data().status !== 'pending' || battleSnap.data().status !== 'waiting') {
+        transaction.update(inviteRef, { status: 'expired' });
+        return false;
+      }
+
+      transaction.update(inviteRef, { status: 'accepted' });
+      transaction.update(battleRef, {
+        status: 'in_progress',
+        'player2.uid': currentProfile.uid,
+        'player2.name': currentProfile.name,
+        'player2.avatar': currentProfile.avatar || '👦🏽',
+        'player2.ready': true,
+        startedAt: serverTimestamp()
+      });
+      return true;
     });
 
+    if (!accepted) {
+      return { success: false, error: 'Esse desafio não está mais disponível.' };
+    }
     return { success: true, battleId: invite.battleId };
   } catch (e) {
     console.error('Erro ao aceitar convite:', e);
@@ -356,51 +378,51 @@ export async function findOrCreateQuickMatch(currentProfile, subjectId = 'geral'
       collection(db, 'battles'),
       where('status', '==', 'waiting_quickmatch'),
       where('subject', '==', subjectId),
-      limit(1)
+      limit(10)
     );
     const snap = await getDocs(q);
+    // Ignora salas abandonadas e a própria sala
+    const roomDoc = snap.docs.find((candidate) => {
+      const candidateData = candidate.data();
+      return candidateData.player1?.uid !== currentProfile.uid && isFreshTimestamp(candidateData.createdAt);
+    });
 
-    if (!snap.empty) {
-      const roomDoc = snap.docs[0];
+    if (roomDoc) {
       const roomData = roomDoc.data();
+      const roomRef = doc(db, 'battles', roomData.id);
+      const joined = await runTransaction(db, async (transaction) => {
+        const freshRoom = await transaction.get(roomRef);
+        if (!freshRoom.exists()) return false;
 
-      // Evita entrar na própria sala
-      if (roomData.player1.uid !== currentProfile.uid) {
-        const roomRef = doc(db, 'battles', roomData.id);
-        const joined = await runTransaction(db, async (transaction) => {
-          const freshRoom = await transaction.get(roomRef);
-          if (!freshRoom.exists()) return false;
-
-          const freshData = freshRoom.data();
-          if (freshData.status !== 'waiting_quickmatch' || freshData.player1?.uid === currentProfile.uid || freshData.player2) {
-            return false;
-          }
-
-          transaction.update(roomRef, {
-            status: 'in_progress',
-            gameMode: subjectId === 'matematica' ? 'tug_of_war' : 'classic',
-            player2: {
-              uid: currentProfile.uid,
-              name: currentProfile.name,
-              avatar: currentProfile.avatar || '👦🏽',
-              score: 0,
-              health: 100,
-              currentQuestion: 0,
-              answeredCurrent: false,
-              lastAnswerCorrect: null,
-              ready: true
-            },
-            startedAt: serverTimestamp()
-          });
-          return true;
-        });
-
-        if (!joined) {
-          return { success: false, error: 'Outro jogador já aceitou essa sala. Tente encontrar outra batalha.' };
+        const freshData = freshRoom.data();
+        if (freshData.status !== 'waiting_quickmatch' || freshData.player1?.uid === currentProfile.uid || freshData.player2) {
+          return false;
         }
 
-        return { success: true, battleId: roomData.id, isHost: false };
+        transaction.update(roomRef, {
+          status: 'in_progress',
+          gameMode: subjectId === 'matematica' ? 'tug_of_war' : 'classic',
+          player2: {
+            uid: currentProfile.uid,
+            name: currentProfile.name,
+            avatar: currentProfile.avatar || '👦🏽',
+            score: 0,
+            health: 100,
+            currentQuestion: 0,
+            answeredCurrent: false,
+            lastAnswerCorrect: null,
+            ready: true
+          },
+          startedAt: serverTimestamp()
+        });
+        return true;
+      });
+
+      if (!joined) {
+        return { success: false, error: 'Outro jogador já aceitou essa sala. Tente encontrar outra batalha.' };
       }
+
+      return { success: true, battleId: roomData.id, isHost: false };
     }
 
     // Se não encontrou sala aberta, cria uma sala esperando jogador
@@ -438,14 +460,35 @@ export async function findOrCreateQuickMatch(currentProfile, subjectId = 'geral'
   }
 }
 
-// Cancela busca rápida
+// Cancela uma sala que ainda não começou (busca rápida ou convite sem resposta)
 export async function cancelQuickMatch(battleId) {
   if (!battleId) return;
   try {
-    await updateDoc(doc(db, 'battles', battleId), { status: 'cancelled' });
+    const battleRef = doc(db, 'battles', battleId);
+    await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(battleRef);
+      if (!snap.exists()) return;
+      const status = snap.data().status;
+      if (status === 'waiting' || status === 'waiting_quickmatch') {
+        transaction.update(battleRef, { status: 'cancelled' });
+      }
+    });
   } catch (e) {
     console.error('Erro ao cancelar matchmaking:', e);
   }
+}
+
+// Registra que o jogador já recebeu o XP desta batalha (evita receber de novo ao reabrir a arena)
+export async function claimBattleReward(battleId, uid) {
+  const battleRef = doc(db, 'battles', battleId);
+  return runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(battleRef);
+    if (!snap.exists()) return false;
+    const battle = snap.data();
+    if (battle.status !== 'finished' || battle.rewardsClaimed?.[uid]) return false;
+    transaction.update(battleRef, { [`rewardsClaimed.${uid}`]: true });
+    return true;
+  });
 }
 
 // Registra resposta de um jogador na batalha
@@ -484,13 +527,10 @@ export async function submitBattleAnswer({
           return;
         }
 
-        console.log('submitBattleAnswer (tug_of_war) called', { battleId, isPlayer1, questionIdx, isCorrect, pointsEarned });
         // Garantir que o valor seja numérico (NaN → 0)
         const pts = Number(pointsEarned);
         const safePts = Number.isNaN(pts) ? 0 : pts;
         const newScore = (currentP.score || 0) + (isCorrect ? safePts : 0);
-        // Debug: pontos calculados
-        console.log('Calculado pts:', safePts, 'newScore:', newScore);
         const updates = {
           [`${pKey}.score`]: newScore,
           [`${pKey}.answeredCurrent`]: true,
@@ -498,7 +538,6 @@ export async function submitBattleAnswer({
         };
 
         if (!currentOpp?.answeredCurrent) {
-          console.log('Tug final update:', updates);
           transaction.update(battleRef, updates);
           return;
         }
@@ -539,14 +578,12 @@ export async function submitBattleAnswer({
         return;
       }
 
-      console.log('submitBattleAnswer (classic) called', { battleId, isPlayer1, questionIdx, isCorrect, pointsEarned });
-// Garantir que o valor seja numérico (NaN → 0)
+      // Garantir que o valor seja numérico (NaN → 0)
       const pts = Number(pointsEarned);
       const safePts = Number.isNaN(pts) ? 0 : pts;
       const newScore = (currentP.score || 0) + (isCorrect ? safePts : 0);
-      const newOppHealth = isCorrect
-        ? Math.max(0, (currentOpp?.health || 100) - 20)
-        : (currentOpp?.health || 100);
+      const oppHealth = currentOpp?.health ?? 100;
+      const newOppHealth = isCorrect ? Math.max(0, oppHealth - 20) : oppHealth;
       const nextQuestion = questionIdx + 1;
       const updates = {
         [`${pKey}.score`]: newScore,
@@ -567,8 +604,7 @@ export async function submitBattleAnswer({
         else updates.winner = 'draw';
       }
 
-      console.log('Classic update:', updates);
-    transaction.update(battleRef, updates);
+      transaction.update(battleRef, updates);
     });
   } catch (e) {
     console.error('Erro ao submeter resposta:', e);

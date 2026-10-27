@@ -2,14 +2,14 @@ import React, { useState } from 'react';
 import { Star, Flame, Shield, Calculator, BookOpen, FlaskConical, Landmark, Globe, MessageCircle, Palette, Activity, Heart, Zap, ArrowRight, Sparkles } from 'lucide-react';
 import AIStudyQuiz from './AIStudyQuiz';
 
-export default function Dashboard({ onNavigate, xp = 0, streak = 1, completedTopics = [] }) {
+export default function Dashboard({ onNavigate, xp = 0, streak = 1, completedToday: completedTodayCount = 0 }) {
   const [showAIQuiz, setShowAIQuiz] = useState(false);
 
   const level = Math.floor(xp / 1000) + 1;
   const levelName = level >= 10 ? 'Mestre' : level >= 5 ? 'Aventureiro' : 'Explorador';
   
   const dailyGoal = 5;
-  const completedToday = Math.min(completedTopics?.length || 0, dailyGoal);
+  const completedToday = Math.min(completedTodayCount, dailyGoal);
   const progressPercent = (completedToday / dailyGoal) * 100;
 
   const openMultiplicationChallenge = () => {
